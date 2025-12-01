@@ -40,26 +40,42 @@ class SimpleMediaController:
                 # 终止可能存在的旧进程
                 self.stop_video()
                 
-                # 使用 mpv 播放视频（推荐）
+                # 使用vlc播放视频（修复版本）
                 self.video_process = subprocess.Popen([
-                    'mpv', 
-                    '--no-terminal', 
+                    'cvlc', 
                     # '--fullscreen', 
-                    '--keep-open=yes',
-                    '--pause=no',
-                    # '--hwdec=auto',  # 启用硬件加速
-                    # '--vo=gpu',  # 使用GPU渲染
-                    '--vf=scale=720:480',  # 强制分辨率
-                    # '--fs',  # 全屏模式
+                    '--no-video-title-show',
+                    '--play-and-exit',
+                    '--demux=ffmpeg',  # 强制使用ffmpeg demuxer
+                    '--video-filter=scale{width=1280,height=720}',  # 强制分辨率
                     self.current_video
                 ])
                 self.video_playing = True
                 self.video_paused = False
-                print("开始播放视频 (使用MPV)")
+                print("开始播放视频 (使用VLC)")
                 return True
             except FileNotFoundError:
-                print("请安装mpv: sudo apt install mpv")
-                return False
+                try:
+                    # 回退到使用mpv播放视频（推荐）
+                    self.video_process = subprocess.Popen([
+                        'mpv', 
+                        '--no-terminal', 
+                        '--fullscreen', 
+                        '--keep-open=yes',
+                        '--pause=no',
+                        '--hwdec=auto',  # 启用硬件加速
+                        '--vo=gpu',  # 使用GPU渲染
+                        '--vf=scale=1280:720',  # 强制分辨率
+                        '--fs',  # 全屏模式
+                        self.current_video
+                    ])
+                    self.video_playing = True
+                    self.video_paused = False
+                    print("开始播放视频 (使用MPV)")
+                    return True
+                except FileNotFoundError:
+                    print("请安装vlc或mpv: sudo apt install vlc 或 sudo apt install mpv")
+            return False
         
     def pause_video(self):
         """暂停视频"""

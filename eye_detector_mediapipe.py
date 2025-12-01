@@ -38,6 +38,11 @@ class MediaPipeEyeDetector:
         self.right_ear_history = deque(maxlen=30)  # 增加历史记录长度
         self.eyes_state_history = deque(maxlen=5)  # 眼睛状态历史记录，用于稳定判断
         self.last_vertical_action_time = 0  # 上次垂直动作时间
+        
+        # FPS计算相关
+        self.frame_count = 0
+        self.start_time = time.time()
+        self.fps = 0
     
         print("使用 MediaPipe 眼睛检测器")
     
@@ -59,6 +64,14 @@ class MediaPipeEyeDetector:
         # 转换颜色空间
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
+        # 计算FPS
+        self.frame_count += 1
+        if self.frame_count % 10 == 0:  # 每10帧更新一次FPS
+            elapsed_time = time.time() - self.start_time
+            self.fps = self.frame_count / elapsed_time if elapsed_time > 0 else 0
+            self.start_time = time.time()
+            self.frame_count = 0
+        
         detection_result = {
             'face_detected': False,
             'eyes_closed': False,
@@ -66,7 +79,8 @@ class MediaPipeEyeDetector:
             'vertical_movement': None,
             'left_ear': 0,
             'right_ear': 0,
-            'eye_center': None
+            'eye_center': None,
+            'fps': self.fps
         }
         
         # 处理帧
@@ -79,6 +93,7 @@ class MediaPipeEyeDetector:
                 self.last_vertical_action_time = 0
             
             # 当没有人脸时，将眼睛状态标记为开放（避免误判为闭眼）
+            # 修复：当face_detected为False时，eyes_closed应该为False
             self.eyes_state_history.append(True)  # False 表示眼睛睁开
             return detection_result
         
@@ -252,3 +267,7 @@ class MediaPipeEyeDetector:
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             cv2.putText(frame, f"Right EAR: {detection_result['right_ear']:.2f}", (10, frame.shape[0] - 30),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            
+        # # 显示FPS
+        # cv2.putText(frame, f"FPS: {detection_result.get('fps', 0):.1f}", (10, 30),
+        #            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
