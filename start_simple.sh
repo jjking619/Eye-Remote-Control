@@ -14,8 +14,9 @@ fi
 export DISPLAY=:0
 export XAUTHORITY=$HOME/.Xauthority
 
-# 给予X11访问权限
-xhost + >/dev/null 2>&1
+# 减少 TensorFlow 日志输出
+export TF_CPP_MIN_LOG_LEVEL=2
+
 
 # 运行主程序
 python3 main_simple.py
