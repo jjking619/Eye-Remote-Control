@@ -36,7 +36,7 @@ class VideoCaptureThread(QThread):
         self.eye_detector = MediaPipeEyeDetector()
         self.action_controller = SimpleActionController()
         
-    def start_capture(self, camera_id=2):
+    def start_capture(self, camera_id=0):
         if self.cap is None:
             self.cap = cv2.VideoCapture(camera_id)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -176,6 +176,11 @@ class MainWindow(QMainWindow):
         self.landmarks_checkbox.setChecked(True)
         self.landmarks_checkbox.stateChanged.connect(self.toggle_landmarks)
         camera_layout.addWidget(self.landmarks_checkbox)
+        
+        # 添加启动眼部关键点可视化工具的按钮
+        self.visualize_btn = QPushButton("启动眼部关键点可视化工具")
+        self.visualize_btn.clicked.connect(self.start_visualization)
+        camera_layout.addWidget(self.visualize_btn)
         
         camera_group.setLayout(camera_layout)
         controls_layout.addWidget(camera_group)
@@ -334,6 +339,23 @@ class MainWindow(QMainWindow):
         self.video_thread.stop_capture()
         self.media_controller.stop_video()
         event.accept()
+        
+    def start_visualization(self):
+        """启动眼部关键点可视化工具"""
+        try:
+            # 先停止当前摄像头
+            self.video_thread.stop_capture()
+            self.start_camera_btn.setEnabled(True)
+            self.stop_camera_btn.setEnabled(False)
+            
+            # 启动可视化工具
+            import subprocess
+            import os
+            visualization_script = os.path.join(os.path.dirname(__file__), 'eye_points_visualizer.py')
+            subprocess.Popen(['python3', visualization_script])
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"无法启动可视化工具: {str(e)}")
 
 def main():
     app = QApplication(sys.argv)

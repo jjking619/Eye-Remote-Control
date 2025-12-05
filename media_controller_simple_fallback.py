@@ -49,7 +49,7 @@ class SimpleMediaController:
                     '--pause=no',
                     # '--hwdec=auto',  # 启用硬件加速
                     # '--vo=gpu',  # 使用GPU渲染
-                    '--vf=scale=720:480',  # 强制分辨率
+                    '--vf=scale=480:360',  # 强制分辨率
                     # '--fs',  # 全屏模式
                     self.current_video
                 ])
