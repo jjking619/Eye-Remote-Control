@@ -35,7 +35,7 @@ class MediaPipeEyeDetector:
         
         # 眨眼检测参数
         self.BLINK_FRAME_THRESHOLD = 3  # 眨眼持续时间阈值（帧数）
-        self.BLINK_COOLDOWN = 10  # 眨眼冷却时间（帧数）
+        self.BLINK_COOLDOWN = 2  # 眨眼冷却时间（帧数）
         
         # 数据缓存
         self.face_position_history = deque(maxlen=15)

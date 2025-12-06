@@ -36,7 +36,7 @@ class VideoCaptureThread(QThread):
         self.eye_detector = MediaPipeEyeDetector()
         self.action_controller = SimpleActionController()
         
-    def start_capture(self, camera_id=0):
+    def start_capture(self, camera_id=3):
         if self.cap is None:
             self.cap = cv2.VideoCapture(camera_id)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -84,8 +84,8 @@ class VideoCaptureThread(QThread):
                     if self.show_landmarks:
                         self.eye_detector.draw_landmarks(processed_frame, detection_result)
                         
-                    # 在画面上绘制调试信息
-                    self.draw_debug_info(processed_frame, detection_result, command)
+                    # # 在画面上绘制调试信息
+                    # self.draw_debug_info(processed_frame, detection_result, command)
                     
                     # 发出命令信号
                     if command:
