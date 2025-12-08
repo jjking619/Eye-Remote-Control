@@ -36,7 +36,7 @@ class VideoCaptureThread(QThread):
         self.eye_detector = MediaPipeEyeDetector()
         self.action_controller = SimpleActionController()
         
-    def start_capture(self, camera_id=3):
+    def start_capture(self, camera_id=2):
         if self.cap is None:
             self.cap = cv2.VideoCapture(camera_id)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)

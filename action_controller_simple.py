@@ -3,7 +3,6 @@ from enum import Enum
 
 class ControlMode(Enum):
     VIDEO = "video"
-    DOCUMENT = "document"
 
 class SimpleActionController:
     def __init__(self):
@@ -16,9 +15,6 @@ class SimpleActionController:
         self.gazing_start_time = 0
         self.gazing_required_duration = 1.5  # 需要持续注视1.5秒才播放
         
-        # 状态跟踪
-        self.last_vertical_action = None
-        
     def process_detection(self, detection_result):
         """处理检测结果并返回控制命令"""
         current_time = time.time()
@@ -29,10 +25,8 @@ class SimpleActionController:
         
         command = None
         
-        if self.mode == ControlMode.VIDEO:
-            command = self._handle_video_mode(detection_result, current_time)
-        elif self.mode == ControlMode.DOCUMENT:
-            command = self._handle_document_mode(detection_result, current_time)
+        # 只保留视频模式处理
+        command = self._handle_video_mode(detection_result, current_time)
         
         if command:
             self.last_action_time = current_time

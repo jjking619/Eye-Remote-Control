@@ -1,5 +1,4 @@
 
-#vlc_version
 import subprocess
 import os
 import time
@@ -12,8 +11,6 @@ class SimpleMediaController:
         self.current_video = None
         self.video_process = None  # 保存视频进程引用
         self.video_paused = False  # 跟踪暂停状态
-        # 确定使用的文档控制方法
-        self.document_control_method = "xdotool"
     def load_video(self, video_path):
         """加载视频文件"""
         if os.path.exists(video_path):
@@ -127,113 +124,6 @@ class SimpleMediaController:
         print("视频停止")
         return True
     
-    def open_pdf(self, pdf_path):
-        """打开PDF文档"""
-        if os.path.exists(pdf_path):
-            try:
-                # 设置环境变量
-                env = os.environ.copy()
-                env['DISPLAY'] = ':0'
-                
-                # 首先尝试使用 okular（如果安装了）
-                result = subprocess.run(['which', 'okular'], 
-                                      capture_output=True, text=True)
-                if result.returncode == 0:
-                    # 使用 okular 打开 PDF
-                    process = subprocess.Popen(['okular', pdf_path], env=env)
-                    print(f"使用 Okular 打开PDF: {pdf_path}")
-                else:
-                    # 回退到 evince
-                    process = subprocess.Popen(['evince', pdf_path], env=env)
-                    print(f"使用 Evince 打开PDF: {pdf_path}")
-                
-                # 等待窗口打开
-                time.sleep(2)
-                
-                # 尝试激活窗口
-                try:
-                    subprocess.run(['wmctrl', '-a', 'okular'], 
-                                 capture_output=True, timeout=5, env=env)
-                except Exception as e:
-                    try:
-                        subprocess.run(['wmctrl', '-a', 'evince'], 
-                                     capture_output=True, timeout=5, env=env)
-                    except Exception as e2:
-                        print(f"激活PDF窗口失败: {e}")
-                
-                return True
-            except Exception as e:
-                print(f"打开PDF失败: {e}")
-        else:
-            print(f"PDF文件不存在: {pdf_path}")
-        return False
-    
-    def control_document(self, command):
-            """控制文档翻页"""
-            print(f"执行文档控制命令: {command} (使用 xdotool 方案)")
-            try:
-                # 设置环境变量
-                env = os.environ.copy()
-                env['DISPLAY'] = ':0'
-                
-                # 直接使用 xdotool 方案（已知有效）
-                window_activated = False
-                
-                # 首先尝试查找所有可能的 PDF 阅读器窗口
-                pdf_apps = ['okular', 'evince', 'atril', 'xpdf']
-                found_window = False
-                
-                for app_name in pdf_apps:
-                    try:
-                        # 使用 xdotool 搜索窗口
-                        search_result = subprocess.run(['xdotool', 'search', '--name', app_name], 
-                                                    capture_output=True, text=True, timeout=1, env=env)
-                        if search_result.returncode == 0 and search_result.stdout.strip():
-                            windows = search_result.stdout.strip().split('\n')
-                            if windows and windows[0]:
-                                window_id = windows[0]
-                                # 激活窗口
-                                subprocess.run(['xdotool', 'windowactivate', '--sync', window_id], 
-                                            capture_output=True, timeout=1, env=env)
-                                print(f"通过 xdotool 激活窗口 {window_id} ({app_name})")
-                                window_activated = True
-                                found_window = True
-                                break
-                    except Exception as e:
-                        continue
-                
-                # 减少等待时间
-                if window_activated:
-                    time.sleep(0.1)
-                
-                # 发送按键 - 只尝试最可能有效的按键
-                key = 'Page_Down' if command == "page_down" else 'Page_Up'
-                print(f"发送按键: {key}")
-                result = subprocess.run(['xdotool', 'key', key], 
-                                    capture_output=True, text=True, timeout=1, env=env)
-                if result.returncode == 0:
-                    print(f"使用 {key} 按键翻页成功")
-                    return
-                else:
-                    print(f"使用 {key} 按键翻页失败: {result.stderr}")
-                    
-            except subprocess.TimeoutExpired:
-                print("文档控制超时")
-            except FileNotFoundError as e:
-                missing_tool = ""
-                if 'xdotool' in str(e):
-                    missing_tool = "xdotool"
-                elif 'wmctrl' in str(e):
-                    missing_tool = "wmctrl"
-                elif 'qdbus' in str(e):
-                    missing_tool = "qdbus"
-                
-                if missing_tool:
-                    print(f"错误: 未找到 {missing_tool} 工具，请安装: sudo apt install {missing_tool}")
-                else:
-                    print(f"文档控制错误: {e}")
-            except Exception as e:
-                print(f"文档控制出现未知错误: {e}")
     
     def get_video_status(self):
         """获取视频播放状态"""
