@@ -21,7 +21,6 @@ class SimpleMediaController:
             print(f"视频文件不存在: {video_path}")
             return False
     
-    # 修改 play_video 方法，添加更多 VLC 参数来解决时间戳问题
     def play_video(self):
         """播放视频"""
         if self.current_video:

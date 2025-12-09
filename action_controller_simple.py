@@ -1,12 +1,7 @@
 import time
-from enum import Enum
-
-class ControlMode(Enum):
-    VIDEO = "video"
 
 class SimpleActionController:
     def __init__(self):
-        self.mode = ControlMode.VIDEO
         self.video_playing = False
         self.last_action_time = 0
         self.action_cooldown = 0.8  # 动作冷却时间
@@ -69,35 +64,3 @@ class SimpleActionController:
         
         return None
     
-    def _handle_document_mode(self, detection_result, current_time):
-        """处理文档模式下的动作"""
-        vertical_move = detection_result['vertical_movement']
-        
-        # 调试输出
-        if detection_result['face_detected'] and not detection_result['eyes_closed']:
-            if vertical_move:
-                print(f"文档模式检测到眼球移动: {vertical_move}")
-            else:
-                print("文档模式: 眼睛睁开但未检测到眼球移动")
-        
-        if vertical_move == "up" and self.last_vertical_action != "up":
-            self.last_vertical_action = "up"
-            print("检测到眼睛快速由下到上，向后翻页")
-            return "page_up"  # 向后翻页（向上滚动）
-        elif vertical_move == "down" and self.last_vertical_action != "down":
-            self.last_vertical_action = "down"
-            print("检测到眼睛快速由上到下，向前翻页")
-            return "page_down"  # 向前翻页（向下滚动）
-        elif vertical_move is None:
-            # 如果没有检测到垂直移动，重置动作状态
-            self.last_vertical_action = None
-        
-        return None
-    
-    def switch_mode(self, new_mode):
-        """切换控制模式"""
-        self.mode = ControlMode(new_mode)
-        self.gazing_start_time = 0
-        self.last_vertical_action = None
-        self.video_playing = False  # 切换模式时重置视频播放状态
-        print(f"切换到 {new_mode.value} 模式")
