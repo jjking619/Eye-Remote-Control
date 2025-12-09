@@ -210,8 +210,6 @@ class MainWindow(QMainWindow):
             if self.media_controller.load_video(file_path):
                 self.video_loaded = True
                 self.status_label.setText(f"状态: 已加载 {os.path.basename(file_path)}")
-                QMessageBox.information(self, "成功", 
-                    f"已加载视频: {os.path.basename(file_path)}\n\n现在可以通过眨眼来控制视频的播放/暂停了！")
             else:
                 self.video_loaded = False
                 self.status_label.setText("状态: 加载失败")
