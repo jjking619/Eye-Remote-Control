@@ -206,7 +206,8 @@ class VideoPlayerThread(QThread):
         self.video_duration = 0
          # 添加退出标志
         self.exiting = False
-
+        self.target_frame = -1  #新增：存储目标帧号
+        
     def load_video(self, file_path):
         """加载视频文件"""
         try:
@@ -273,12 +274,6 @@ class VideoPlayerThread(QThread):
         if self.cap:
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             
-    def seek(self, frame_num):
-        """跳转到指定帧"""
-        if self.cap and 0 <= frame_num < self.total_frames:
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
-            self.current_frame = frame_num
-            
     def get_position(self):
         """获取当前播放位置"""
         if self.cap and self.total_frames > 0:
@@ -288,6 +283,12 @@ class VideoPlayerThread(QThread):
     def run(self):
         """播放线程主循环"""
         while not self.exiting:
+            # 处理跳转请求
+            if self.target_frame >= 0 and self.cap and 0 <= self.target_frame < self.total_frames:
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.target_frame)
+                self.current_frame = self.target_frame
+                self.target_frame = -1  #重置目标帧
+                
             if self.stopped:
                 time.sleep(0.1)
                 continue
@@ -331,13 +332,19 @@ class VideoPlayerThread(QThread):
             self.cap = None
         
         print("视频播放线程已退出")
+    
     def shutdown(self):
             """安全关闭线程"""
             self.exiting = True
             self.playing = False
             self.paused = False
             self.stopped = True
- 
+            
+    def seek(self, frame_number):
+        """跳转到指定帧"""
+        if self.cap and 0 <= frame_number < self.total_frames:
+            self.target_frame = frame_number
+
   # ==================== 新增全屏播放窗口类 ====================
 class FullScreenPlayer(QWidget):
     """全屏播放窗口"""
