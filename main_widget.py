@@ -913,7 +913,7 @@ class MainWindow(QMainWindow):
         """)
         
     def init_ui(self):
-        self.setWindowTitle('👁️ AI Vision Control')
+        self.setWindowTitle('👁️ Eye controller')
         self.setGeometry(100, 100, 1400, 900)
         
         # 创建中央部件
@@ -932,7 +932,7 @@ class MainWindow(QMainWindow):
         
         title_layout = QHBoxLayout(title_frame)
         
-        title_label = QLabel("👁️ AI Vision Control")
+        title_label = QLabel("👁️ Eye controller")
         title_label.setStyleSheet("color: #89b4fa; font-size: 18px; font-weight: bold;")
         
         # 全屏按钮
