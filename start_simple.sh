@@ -11,6 +11,6 @@ else
 fi
 
 echo "启动应用..."
-python3 main_widget.py
+python3 main.py
 
 echo "应用已退出"
