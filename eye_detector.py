@@ -6,7 +6,7 @@ import mediapipe as mp
 
 class MediaPipeEyeDetector:
     def __init__(self):
-        # 初始化 MediaPipe Face Mesh
+        # Initialize MediaPipe Face Mesh
         self.mp_face_mesh = mp.solutions.face_mesh
         self.face_mesh = self.mp_face_mesh.FaceMesh(
             max_num_faces=1,
@@ -15,60 +15,57 @@ class MediaPipeEyeDetector:
             min_tracking_confidence=0.5
         )        
         
-        # MediaPipe 绘图工具
+        # MediaPipe drawing utilities
         self.mp_drawing = mp.solutions.drawing_utils
         self.mp_drawing_styles = mp.solutions.drawing_styles
         
-        # 标准EAR计算使用的6个关键点索引
-        self.LEFT_EYE_INDICES = [33, 159, 158, 133, 153, 145]  # 顺序：p1, p2, p3, p4, p5, p6
-        self.RIGHT_EYE_INDICES = [362, 386, 385, 263, 380, 374]  # 顺序：p1, p2, p3, p4, p5, p6
+        # Indices of 6 key points for standard EAR calculation
+        self.LEFT_EYE_INDICES = [33, 159, 158, 133, 153, 145]  # Order: p1, p2, p3, p4, p5, p6
+        self.RIGHT_EYE_INDICES = [362, 386, 385, 263, 380, 374]  # Order: p1, p2, p3, p4, p5, p6
         
-        # 鼻子关键点索引（用于头部稳定性检测）
+        # Nose key point indices (for head stability detection)
         self.NOSE_INDICES = [1, 4, 6, 168, 197, 195, 5]
         
-        # 配置参数
-        self.GAZING_STABILITY_THRESHOLD = 35  # 凝视稳定性阈值
-        self.GAZING_CONFIRMATION_FRAMES = 12  # 凝视确认需要的连续帧数（降低要求）
-        self.GAZING_BREAK_FRAMES = 15  # 打破凝视需要的连续不稳定帧数（增加要求）
-        self.GAZING_BLINK_TOLERANCE = 8  # 凝视中允许的眨眼最大帧数
+        # Configuration parameters
+        self.GAZING_STABILITY_THRESHOLD = 35  # Gaze stability threshold
+        self.GAZING_CONFIRMATION_FRAMES = 12  # Continuous frames required to confirm gaze (lower requirement)
+        self.GAZING_BREAK_FRAMES = 15  # Continuous unstable frames required to break gaze (higher requirement)
         
-        self.EAR_THRESHOLD = 0.21  # 眼睛纵横比闭眼阈值
-        self.EAR_BLINK_THRESHOLD = 0.18  # 眨眼阈值
-        self.EAR_OPEN_THRESHOLD = 0.25  # 眼睛完全睁开阈值
+        self.EAR_THRESHOLD = 0.21  # Eye Aspect Ratio (EAR) threshold when eyes are closed
+        self.EAR_BLINK_THRESHOLD = 0.18  # Blink threshold
+        self.EAR_OPEN_THRESHOLD = 0.25  # Threshold for fully open eyes
         
-        # 眨眼检测参数
-        self.BLINK_FRAME_THRESHOLD = 4  # 眨眼持续时间阈值（帧数）
-        self.BLINK_COOLDOWN = 10  # 眨眼冷却时间（帧数）
+        # Blink detection parameters
+        self.BLINK_FRAME_THRESHOLD = 4  # Blink duration threshold (in frames)
         
-        # 数据缓存
+        # Data cache
         self.face_position_history = deque(maxlen=25)
         self.left_ear_history = deque(maxlen=40)
         self.right_ear_history = deque(maxlen=40)
         self.eyes_state_history = deque(maxlen=30)
         self.nose_position_history = deque(maxlen=25)
         
-        # 眼睛状态跟踪
+        # Eye state tracking
         self.eye_state = "open"
         self.blink_counter = 0
         self.closed_counter = 0
-        self.blink_cooldown_counter = 0
-        self.in_blink_phase = False  # 是否在眨眼阶段
-        self.blink_start_frame = 0  # 眨眼开始帧数
+        self.in_blink_phase = False  # Whether in blinking phase
+        self.blink_start_frame = 0  # Blink start frame number
         
-        # 凝视状态跟踪
+        # Gaze state tracking
         self.gazing_state = "not_gazing"  # not_gazing, transitioning, gazing
         self.gazing_confirm_counter = 0
         self.gazing_break_counter = 0
         
-        # FPS计算相关
+        # FPS calculation related
         self.frame_count = 0
         self.start_time = time.time()
         self.fps = 0
     
-        print("使用 MediaPipe 眼睛检测器（凝视时眨眼不影响视频播放）")
+        print("Using MediaPipe eye detector (blinking during gaze does not affect video playback)")
     
     def calculate_ear(self, eye_landmarks):
-        """使用标准6点法计算眼睛纵横比 (Eye Aspect Ratio)"""
+        """Calculate Eye Aspect Ratio (EAR) using standard 6-point method"""
         p1, p2, p3, p4, p5, p6 = eye_landmarks
         
         A = np.linalg.norm(p2 - p6)
@@ -82,9 +79,9 @@ class MediaPipeEyeDetector:
         return ear
     
     def calculate_position_variance(self, position_history):
-        """计算位置历史记录的方差"""
+        """Calculate variance of position history"""
         if len(position_history) < 5:
-            return 1000  # 返回一个大值表示不稳定
+            return 1000  # Return a large value to indicate instability
         
         positions = [pos for pos, _ in position_history]
         x_variance = np.var([p[0] for p in positions])
@@ -92,11 +89,8 @@ class MediaPipeEyeDetector:
         return x_variance + y_variance
     
     def update_eye_state(self, avg_ear):
-        """更新眼睛状态机"""
-        if self.blink_cooldown_counter > 0:
-            self.blink_cooldown_counter -= 1
-        
-        # 状态转移逻辑
+        """Update eye state machine"""
+        # State transition logic
         if self.eye_state == "open":
             if avg_ear < self.EAR_BLINK_THRESHOLD:
                 self.eye_state = "closing"
@@ -137,7 +131,7 @@ class MediaPipeEyeDetector:
         return self.eye_state
     
     def update_gazing_state(self, position_variance):
-        """更新凝视状态机 - 简化版本，只根据头部稳定性判断"""
+        """Update gaze state machine - simplified version based only on head stability"""
         is_stable = position_variance < self.GAZING_STABILITY_THRESHOLD
         
         if self.gazing_state == "not_gazing":
@@ -167,10 +161,10 @@ class MediaPipeEyeDetector:
         return self.gazing_state
     
     def detect_eyes_state(self, frame):
-        """使用 MediaPipe 检测眼睛状态"""
+        """Detect eye state using MediaPipe"""
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
-        # 计算FPS
+        # Calculate FPS
         self.frame_count += 1
         if self.frame_count % 10 == 0:
             elapsed_time = time.time() - self.start_time
@@ -182,7 +176,7 @@ class MediaPipeEyeDetector:
             'face_detected': False,
             'eyes_closed': False,
             'is_blinking': False,
-            'is_short_blink': False,  # 是否为短时眨眼（在凝视中应忽略）
+            'is_short_blink': False,  # Whether it's a short blink (should be ignored during gaze)
             'eye_state': 'unknown',
             'is_gazing': False,
             'gazing_state': 'not_gazing',
@@ -194,7 +188,7 @@ class MediaPipeEyeDetector:
             'fps': self.fps
         }
         
-        # 处理帧
+        # Process frame
         results = self.face_mesh.process(rgb_frame)
         
         if not results.multi_face_landmarks:
@@ -213,34 +207,34 @@ class MediaPipeEyeDetector:
         
         detection_result['face_detected'] = True
         
-        # 获取第一个人脸的关键点
+        # Get landmarks of the first face
         face_landmarks = results.multi_face_landmarks[0]
         
-        # 提取眼部关键点坐标
+        # Extract eye landmark coordinates
         h, w = frame.shape[:2]
         left_eye_points = []
         right_eye_points = []
         nose_points = []
         
-        # 左眼关键点
+        # Left eye landmarks
         for idx in self.LEFT_EYE_INDICES:
             landmark = face_landmarks.landmark[idx]
             x, y = int(landmark.x * w), int(landmark.y * h)
             left_eye_points.append(np.array([x, y]))
         
-        # 右眼关键点
+        # Right eye landmarks
         for idx in self.RIGHT_EYE_INDICES:
             landmark = face_landmarks.landmark[idx]
             x, y = int(landmark.x * w), int(landmark.y * h)
             right_eye_points.append(np.array([x, y]))
         
-        # 鼻子关键点
+        # Nose landmarks
         for idx in self.NOSE_INDICES:
             landmark = face_landmarks.landmark[idx]
             x, y = int(landmark.x * w), int(landmark.y * h)
             nose_points.append(np.array([x, y]))
         
-        # 计算眼睛纵横比
+        # Calculate Eye Aspect Ratio
         left_ear = self.calculate_ear(left_eye_points)
         right_ear = self.calculate_ear(right_eye_points)
         avg_ear = (left_ear + right_ear) / 2.0
@@ -249,63 +243,67 @@ class MediaPipeEyeDetector:
         detection_result['right_ear'] = right_ear
         detection_result['avg_ear'] = avg_ear
         
-        # 记录历史EAR值
+        # Record historical EAR values
         self.left_ear_history.append(left_ear)
         self.right_ear_history.append(right_ear)
         
-        # 更新眼睛状态机
+        # Update eye state machine
         eye_state = self.update_eye_state(avg_ear)
         detection_result['eye_state'] = eye_state
         
-        # 确定是否为眨眼（短时闭眼）
+        # Determine if it's a blink (short-term eye closure)
         is_blinking = False
         is_short_blink = False
         
         if eye_state == "closed":
-            detection_result['eyes_closed'] = True
-            # 判断是否为短时眨眼（持续时间在阈值内）
+            # Determine if it's a short blink (duration within threshold)
             if self.closed_counter <= self.BLINK_FRAME_THRESHOLD:
                 is_short_blink = True
                 is_blinking = True
+                # For short blinks, don't consider eyes as closed
+                detection_result['eyes_closed'] = False
+            else:
+                # Long closure, consider eyes as closed
+                detection_result['eyes_closed'] = True
         elif eye_state == "closing":
-            detection_result['eyes_closed'] = avg_ear < self.EAR_THRESHOLD
             if (self.blink_counter <= self.BLINK_FRAME_THRESHOLD and 
-                self.blink_cooldown_counter == 0 and
                 self.in_blink_phase):
                 is_blinking = True
-                if self.blink_counter <= 3:  # 非常短的闭眼
+                if self.blink_counter <= 3:  # Very short eye closure
                     is_short_blink = True
+            # During closing phase, eyes are not yet fully closed
+            detection_result['eyes_closed'] = False
         else:
             detection_result['eyes_closed'] = False
         
         detection_result['is_blinking'] = is_blinking
         detection_result['is_short_blink'] = is_short_blink
         
-        # 记录眼睛状态历史
+        # Record eye state history
         self.eyes_state_history.append(eye_state)
         
-        # 计算眼睛中心位置
+        # Calculate eye center position
         left_eye_center = np.mean(left_eye_points, axis=0)
         right_eye_center = np.mean(right_eye_points, axis=0)
         eye_center = ((left_eye_center + right_eye_center) / 2).astype(int)
         detection_result['eye_center'] = (int(eye_center[0]), int(eye_center[1]))
         
-        # 计算鼻子中心位置
+        # Calculate nose center position
         nose_center = np.mean(nose_points, axis=0).astype(int)
         
-        # 记录位置历史
+        # Record position history
         current_time = time.time()
         self.face_position_history.append((tuple(eye_center), current_time))
         self.nose_position_history.append((tuple(nose_center), current_time))
         
-        # 计算位置方差
+        # Calculate position variance
         if len(self.face_position_history) >= 5 and len(self.nose_position_history) >= 5:
             eye_variance = self.calculate_position_variance(self.face_position_history)
             nose_variance = self.calculate_position_variance(self.nose_position_history)
             position_variance = (eye_variance + nose_variance) / 2.0
             detection_result['position_variance'] = position_variance
             
-            # 更新凝视状态（简化版，不考虑眨眼）
+            # Update gaze state (simplified version, does not consider blinking)
             gazing_state = self.update_gazing_state(position_variance)
             detection_result['gazing_state'] = gazing_state
             detection_result['is_gazing'] = (gazing_state == "gazing")
@@ -316,27 +314,27 @@ class MediaPipeEyeDetector:
         return detection_result
     
     def draw_landmarks(self, frame, detection_result):
-        """在帧上绘制关键点和信息"""
+        """Draw landmarks and information on the frame"""
         if detection_result['eye_center']:
             center_x, center_y = detection_result['eye_center']
             
-            # 绘制凝视状态可视化
+            # Draw gaze state visualization
             if detection_result['is_gazing']:
-                # 绿色圆圈表示凝视状态
+                # Green circle indicates gaze state
                 cv2.circle(frame, (center_x, center_y), 30, (0, 255, 0), 3)
                 cv2.putText(frame, "GAZING", (center_x - 40, center_y - 40),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
             else:
-                # 红色圆圈表示未凝视
+                # Red circle indicates not gazing
                 cv2.circle(frame, (center_x, center_y), 30, (0, 0, 255), 2)
         
-        # 显示 EAR 值和眼睛状态
+        # Display EAR value and eye state
         if detection_result['left_ear'] > 0 and detection_result['right_ear'] > 0:
-            # 显示平均EAR
+            # Display average EAR
             cv2.putText(frame, f"EAR: {detection_result['avg_ear']:.3f}", (10, frame.shape[0] - 150),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             
-            # 显示眼睛状态
+            # Display eye state
             state = detection_result['eye_state']
             if state == "open":
                 status_color = (0, 255, 0)
@@ -357,25 +355,25 @@ class MediaPipeEyeDetector:
             cv2.putText(frame, f"Eyes: {status_text}", (10, frame.shape[0] - 120),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
             
-            # 显示凝视状态
+            # Display gaze state
             gazing_state = detection_result['gazing_state']
             if gazing_state == "gazing":
                 gaze_color = (0, 255, 0)
                 gaze_text = "GAZING"
-                # 在凝视状态下，显示视频播放状态
+                # In gaze state, display video playing status
                 cv2.putText(frame, "VIDEO: PLAYING", (frame.shape[1] - 200, 30),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                # 在凝视状态下，如果眨眼也不暂停视频
+                # In gaze state, blinking does not pause video
                 if detection_result['is_blinking']:
                     cv2.putText(frame, "BLINK (GAZING)", (frame.shape[1] - 200, 60),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 165, 255), 2)
             else:
                 gaze_color = (0, 0, 255)
                 gaze_text = "NOT GAZING"
-                # 在非凝视状态下，显示视频暂停状态
+                # In non-gaze state, display video paused status
                 cv2.putText(frame, "VIDEO: PAUSED", (frame.shape[1] - 200, 30),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                # 在非凝视状态下，眨眼会导致视频暂停
+                # In non-gaze state, blinking causes video to pause
                 if detection_result['is_blinking']:
                     cv2.rectangle(frame, (frame.shape[1] - 200, 60), (frame.shape[1] - 10, 100), (0, 0, 255), -1)
                     cv2.putText(frame, "BLINK (PAUSED)", (frame.shape[1] - 190, 90),
@@ -384,10 +382,10 @@ class MediaPipeEyeDetector:
             cv2.putText(frame, f"Gaze: {gaze_text}", (10, frame.shape[0] - 90),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, gaze_color, 2)
             
-            # 显示凝视计数器（调试用）
+            # Display gaze counter (for debugging)
             cv2.putText(frame, f"Gaze Confirm: {self.gazing_confirm_counter}/{self.GAZING_CONFIRMATION_FRAMES}", 
                        (10, frame.shape[0] - 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
             
-            # 显示FPS
+            # Display FPS
             cv2.putText(frame, f"FPS: {detection_result['fps']:.1f}", (10, 30),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
