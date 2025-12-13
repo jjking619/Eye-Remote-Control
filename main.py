@@ -166,7 +166,7 @@ class MainWindow(QMainWindow):
         """)
         
     def init_ui(self):
-        self.setWindowTitle('👁️ Eye controller')
+        self.setWindowTitle('👁️ Eye Remote Control')
         self.setGeometry(100, 100, 1400, 900)
         
         # Create central widget
@@ -185,7 +185,7 @@ class MainWindow(QMainWindow):
         
         title_layout = QHBoxLayout(title_frame)
         
-        title_label = QLabel("👁️ Eye controller")
+        title_label = QLabel("👁️ Eye Remote Control")
         title_label.setStyleSheet("color: #89b4fa; font-size: 18px; font-weight: bold;")
         
         # Fullscreen button
