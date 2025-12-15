@@ -42,35 +42,6 @@ class VideoCaptureThread(QThread):
                     cap.release()
                     return i
             cap.release()
-            
-        # If no default cameras found, try higher indexes (10-20)
-        # Some systems may have cameras with higher indexes
-        for i in range(10, 21):
-            cap = cv2.VideoCapture(i)
-            if cap.isOpened():
-                ret, frame = cap.read()
-                if ret:
-                    cap.release()
-                    return i
-            cap.release()
-            
-        # Try platform-specific camera paths for Linux systems
-        # These paths are common for USB and integrated cameras on Linux
-        linux_camera_paths = [
-            "/dev/video0", "/dev/video1", "/dev/video2", 
-            "/dev/video3", "/dev/video4", "/dev/video5"
-        ]
-        
-        for path in linux_camera_paths:
-            cap = cv2.VideoCapture(path)
-            if cap.isOpened():
-                ret, frame = cap.read()
-                if ret:
-                    cap.release()
-                    # Return the index part of the path
-                    return int(path.replace("/dev/video", ""))
-            cap.release()
-            
         return None
 
     def start_capture(self, camera_id=None):
