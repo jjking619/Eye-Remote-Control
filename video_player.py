@@ -2,7 +2,7 @@ import cv2
 import time
 import os
 from PySide6.QtCore import QThread, Signal
-
+from log import debug, info, warning, error, critical  # Import logging functions
 
 class VideoPlayerThread(QThread):
     """Video player thread"""
@@ -31,13 +31,17 @@ class VideoPlayerThread(QThread):
     def load_video(self, file_path):
         """Load video file"""
         try:
+            debug(f"Attempting to load video: {file_path}")
+            
             # If a video is already loaded, release it first
             if self.cap:
+                debug("Releasing existing video capture")
                 self.cap.release()
-
+                self.cap = None
+                
             self.cap = cv2.VideoCapture(file_path)
             if not self.cap.isOpened():
-                print(f"Cannot open video file: {file_path}")
+                error(f"Cannot open video file: {file_path}")
                 return False
 
             self.current_file = file_path
@@ -69,10 +73,11 @@ class VideoPlayerThread(QThread):
 
             # Emit video information
             self.video_info_ready.emit(video_info)
+            debug(f"Successfully loaded video: {file_path}, total frames: {self.total_frames}")
 
             return True
         except Exception as e:
-            print(f"Failed to load video: {e}")
+            error(f"Failed to load video: {e}")
             return False
 
     def play(self):
@@ -83,10 +88,12 @@ class VideoPlayerThread(QThread):
 
     def pause(self):
         """Pause playback"""
+        debug(f"Pausing playback for video: {self.current_file}")
         self.paused = True
 
     def stop(self):
         """Stop playback"""
+        debug(f"Stopping playback for video: {self.current_file}")
         self.playing = False
         self.paused = False
         self.stopped = True
@@ -110,10 +117,12 @@ class VideoPlayerThread(QThread):
                 self.target_frame = -1  # Reset target frame
 
             if self.stopped:
+                debug("Playback stopped, waiting...")
                 time.sleep(0.1)
                 continue
 
             if not self.playing or self.paused:
+                debug("Playback paused or not playing, waiting...")
                 time.sleep(0.1)
                 continue
 
@@ -129,6 +138,7 @@ class VideoPlayerThread(QThread):
 
                     # Check if playback is finished
                     if self.current_frame >= self.total_frames:
+                        debug("Playback finished")
                         self.playing = False
                         self.stopped = True
                         self.current_frame = 0
@@ -137,24 +147,29 @@ class VideoPlayerThread(QThread):
                         self.playback_finished.emit()
                 else:
                     # Playback finished
+                    debug("Playback finished (no more frames)")
                     self.playing = False
                     self.stopped = True
                     self.current_frame = 0
+                    
                     if self.cap:
                         self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     self.playback_finished.emit()
             else:
+                debug("Video capture not opened or failed")
                 time.sleep(0.1)
 
         # Clean up resources
         if self.cap:
+            debug("Cleaning up video capture resources")
             self.cap.release()
             self.cap = None
 
-        print("Video player thread exited")
+        debug("Video player thread exited")
 
     def shutdown(self):
         """Safely shut down thread"""
+        debug("Shutting down video player thread")
         self.exiting = True
         self.playing = False
         self.paused = False
@@ -162,5 +177,6 @@ class VideoPlayerThread(QThread):
 
     def seek(self, frame_number):
         """Seek to specific frame"""
+        debug(f"Requesting seek to frame: {frame_number}")
         if self.cap and 0 <= frame_number < self.total_frames:
             self.target_frame = frame_number

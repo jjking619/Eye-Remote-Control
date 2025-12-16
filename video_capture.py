@@ -2,6 +2,7 @@ import cv2
 import time
 from PySide6.QtCore import QThread, Signal
 from eye_detector import MediaPipeEyeDetector
+from log import debug,error
 
 
 class VideoCaptureThread(QThread):
@@ -33,6 +34,7 @@ class VideoCaptureThread(QThread):
 
     def find_available_camera(self):
         """Automatically detect available camera"""
+        debug("Searching for available camera devices...")
         # First try the default cameras (0-9)
         for i in range(10):
             cap = cv2.VideoCapture(i)
@@ -40,8 +42,10 @@ class VideoCaptureThread(QThread):
                 ret, frame = cap.read()
                 if ret:
                     cap.release()
+                    debug(f"Found available camera at device ID: {i}")
                     return i
             cap.release()
+        error("No available camera device found")
         return None
 
     def start_capture(self, camera_id=None):
@@ -50,6 +54,8 @@ class VideoCaptureThread(QThread):
             if camera_id is None:
                 raise Exception("No available camera device found")
 
+        debug(f"Starting camera capture on device ID: {camera_id}")
+        
         if self.cap is None:
             self.cap = cv2.VideoCapture(camera_id)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -64,6 +70,7 @@ class VideoCaptureThread(QThread):
 
     def stop_capture(self):
         """Improved stop method"""
+        debug("Stopping camera capture...")
         self.running = False
         self.exiting = True
 
@@ -72,6 +79,7 @@ class VideoCaptureThread(QThread):
             self.wait(2000)  # Wait up to 2 seconds
 
         if self.cap:
+            debug("Releasing camera capture")
             self.cap.release()
             self.cap = None
 
@@ -138,11 +146,12 @@ class VideoCaptureThread(QThread):
 
                         # Emit command signal
                         if command and command != self.last_command:
+                            debug(f"Command detected: {command}")
                             self.command_detected.emit(command)
                             self.last_command = command
 
                     except Exception as e:
-                        print(f"Detection error: {e}")
+                        error(f"Detection error: {e}")
                         # Emit empty status to indicate detection failure
                         self.detection_status.emit({})
                 else:
@@ -156,14 +165,16 @@ class VideoCaptureThread(QThread):
 
         # Clean up resources
         if self.cap:
+            debug("Cleaning up camera capture resources")
             self.cap.release()
             self.cap = None
 
         # Release MediaPipe resources
         try:
+            debug("Closing MediaPipe eye detector")
             self.eye_detector.close()
         except:
             pass
 
-        print("Camera thread exited")
+        debug("Camera thread exited")
         self.finished.emit()
