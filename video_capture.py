@@ -1,7 +1,9 @@
 import cv2
 import time
+import threading
 from PySide6.QtCore import QThread, Signal
 from eye_detector import MediaPipeEyeDetector
+from log import debug,error
 
 
 class VideoCaptureThread(QThread):
@@ -20,6 +22,8 @@ class VideoCaptureThread(QThread):
 
         # Add exit flag
         self.exiting = False
+        self._closed = True  # Track whether resources have been released
+        self._lock = threading.RLock()  # Reentrant lock for resource protection
 
         # Component initialization
         self.eye_detector = MediaPipeEyeDetector()
@@ -33,44 +37,27 @@ class VideoCaptureThread(QThread):
 
     def find_available_camera(self):
         """Automatically detect available camera"""
+        debug("Searching for available camera devices...")
         # First try the default cameras (0-9)
         for i in range(10):
-            cap = cv2.VideoCapture(i)
-            if cap.isOpened():
-                ret, frame = cap.read()
-                if ret:
-                    cap.release()
-                    return i
-            cap.release()
-            
-        # If no default cameras found, try higher indexes (10-20)
-        # Some systems may have cameras with higher indexes
-        for i in range(10, 21):
-            cap = cv2.VideoCapture(i)
-            if cap.isOpened():
-                ret, frame = cap.read()
-                if ret:
-                    cap.release()
-                    return i
-            cap.release()
-            
-        # Try platform-specific camera paths for Linux systems
-        # These paths are common for USB and integrated cameras on Linux
-        linux_camera_paths = [
-            "/dev/video0", "/dev/video1", "/dev/video2", 
-            "/dev/video3", "/dev/video4", "/dev/video5"
-        ]
-        
-        for path in linux_camera_paths:
-            cap = cv2.VideoCapture(path)
-            if cap.isOpened():
-                ret, frame = cap.read()
-                if ret:
-                    cap.release()
-                    # Return the index part of the path
-                    return int(path.replace("/dev/video", ""))
-            cap.release()
-            
+            temp_cap = None
+            try:
+                temp_cap = cv2.VideoCapture(i)
+                if temp_cap.isOpened():
+                    ret, frame = temp_cap.read()
+                    if ret:
+                        temp_cap.release()
+                        debug(f"Found available camera at device ID: {i}")
+                        return i
+            except Exception as e:
+                error(f"Error checking camera {i}: {e}")
+            finally:
+                if temp_cap is not None:
+                    try:
+                        temp_cap.release()
+                    except:
+                        pass
+        error("No available camera device found")
         return None
 
     def start_capture(self, camera_id=None):
@@ -79,120 +66,197 @@ class VideoCaptureThread(QThread):
             if camera_id is None:
                 raise Exception("No available camera device found")
 
-        if self.cap is None:
+        debug(f"Starting camera capture on device ID: {camera_id}")
+        
+        # Release existing capture if any
+        self._safe_release_capture()
+        
+        with self._lock:
             self.cap = cv2.VideoCapture(camera_id)
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            self.cap.set(cv2.CAP_PROP_FPS, 30)
+            if self.cap.isOpened():
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                self.cap.set(cv2.CAP_PROP_FPS, 30)
+                self._closed = False
 
-        self.running = True
-        self.frame_count = 0
-        self.fps = 0
-        self.last_fps_time = time.time()
+        with self._lock:
+            self.running = True
+            self.frame_count = 0
+            self.fps = 0
+            self.last_fps_time = time.time()
         self.start()
 
     def stop_capture(self):
-        """Improved stop method"""
-        self.running = False
-        self.exiting = True
+        debug("Stopping camera capture...")
+        with self._lock:
+            self.running = False
+            self.exiting = True
 
         # Wait for thread to finish, but set timeout
         if self.isRunning():
             self.wait(2000)  # Wait up to 2 seconds
 
-        if self.cap:
-            self.cap.release()
-            self.cap = None
+        # Release capture resources
+        self._safe_release_capture()
+
+    def _safe_release_capture(self):
+        """Safely release camera capture resources with multiple safety checks"""
+        try:
+            with self._lock:
+                if self.cap is not None:
+                    try:
+                        if not self._closed:
+                            debug("Releasing camera capture")
+                            self.cap.release()
+                    except Exception as e:
+                        error(f"Error releasing camera capture: {e}")
+                    finally:
+                        self.cap = None
+                        self._closed = True
+                else:
+                    # Even if cap is None, mark as closed
+                    self._closed = True
+        except Exception as e:
+            error(f"Error in _safe_release_capture: {e}")
+        finally:
+            with self._lock:
+                self.cap = None
+                self._closed = True
 
     def toggle_detection(self, detecting):
-        self.detecting = detecting
+        with self._lock:
+            self.detecting = detecting
 
     def toggle_landmarks(self, show):
-        self.show_landmarks = show
+        with self._lock:
+            self.show_landmarks = show
 
     def run(self):
-        while self.running and self.cap and self.cap.isOpened():
-            ret, frame = self.cap.read()
-            if ret:
-                # Calculate FPS
-                self.frame_count += 1
-                current_time = time.time()
-                if current_time - self.last_fps_time >= 1.0:  # Update once per second
-                    self.fps = self.frame_count / (current_time - self.last_fps_time)
-                    self.frame_count = 0
-                    self.last_fps_time = current_time
+        while True:
+            # Check exit conditions
+            should_continue = False
+            with self._lock:
+                if (self.running and self.cap is not None and not self._closed):
+                    try:
+                        should_continue = self.cap.isOpened()
+                    except:
+                        should_continue = False
+                    
+            if not should_continue:
+                break
+                
+            try:
+                ret, frame = None, None
+                cap_valid = False
+                with self._lock:
+                    cap_valid = self.cap is not None and not self._closed
+                    
+                if cap_valid:
+                    try:
+                        ret, frame = self.cap.read()
+                    except Exception as e:
+                        error(f"Error reading frame: {e}")
+                        ret = False
+                        
+                if ret and frame is not None:
+                    # Calculate FPS
+                    with self._lock:
+                        self.frame_count += 1
+                        current_time = time.time()
+                        if current_time - self.last_fps_time >= 1.0:  # Update once per second
+                            self.fps = self.frame_count / (current_time - self.last_fps_time)
+                            self.frame_count = 0
+                            self.last_fps_time = current_time
                     self.fps_updated.emit(self.fps)
 
-                processed_frame = frame.copy()
-                detection_result = {}
+                    processed_frame = frame.copy()
+                    detection_result = {}
 
-                # Process frame if detection is enabled
-                if self.detecting:
-                    try:
-                        # Detect eye state
-                        detection_result = self.eye_detector.detect_eyes_state(processed_frame)
+                    # Process frame if detection is enabled
+                    detecting_enabled = False
+                    with self._lock:
+                        detecting_enabled = self.detecting
+                        
+                    if detecting_enabled:
+                        try:
+                            # Detect eye state
+                            detection_result = self.eye_detector.detect_eyes_state(processed_frame)
 
-                        # Emit detection status
-                        self.detection_status.emit(detection_result)
+                            # Emit detection status
+                            self.detection_status.emit(detection_result)
 
-                        # Handle actions according to new control logic
-                        # When playing video, continue playing if eyes are gazing at screen, 
-                        command = None
-                        face_detected = detection_result.get('face_detected', False)
+                            # Handle actions according to new control logic
+                            # When playing video, continue playing if eyes are gazing at screen, 
+                            command = None
+                            face_detected = detection_result.get('face_detected', False)
 
-                        if face_detected:
-                            # Update last face detected time
-                            self.last_face_detected_time = current_time
+                            if face_detected:
+                                # Update last face detected time
+                                with self._lock:
+                                    self.last_face_detected_time = current_time
 
-                            # Check if eyes are closed
-                            eyes_closed = detection_result.get('eyes_closed', False)
+                                # Check if eyes are closed
+                                eyes_closed = detection_result.get('eyes_closed', False)
 
-                            # Check if user is gazing
-                            is_gazing = detection_result.get('is_gazing', False)
+                                # Check if user is gazing
+                                is_gazing = detection_result.get('is_gazing', False)
 
-                            # Pause if eyes are closed or not gazing
-                            # The eye detector already handles short blinks appropriately
-                            if eyes_closed or not is_gazing:
-                                command = "pause"
+                                # Pause if eyes are closed or not gazing
+                                # The eye detector already handles short blinks appropriately
+                                if eyes_closed or not is_gazing:
+                                    command = "pause"
+                                else:
+                                    command = "play"
                             else:
-                                command = "play"
-                        else:
-                            # Pause video if no face detected for over 1 second
-                            if current_time - self.last_face_detected_time > 1.0:
-                                command = "pause"
+                                # Pause video if no face detected for over 1 second
+                                last_face_time = 0
+                                with self._lock:
+                                    last_face_time = self.last_face_detected_time
+                                if current_time - last_face_time > 1.0:
+                                    command = "pause"
 
-                        # Draw landmarks (optional)
-                        if self.show_landmarks and face_detected:
-                            self.eye_detector.draw_landmarks(processed_frame, detection_result)
+                            # Draw landmarks (optional)
+                            show_landmarks = False
+                            with self._lock:
+                                show_landmarks = self.show_landmarks
+                                
+                            if show_landmarks and face_detected:
+                                self.eye_detector.draw_landmarks(processed_frame, detection_result)
 
-                        # Emit command signal
-                        if command and command != self.last_command:
-                            self.command_detected.emit(command)
-                            self.last_command = command
+                            # Emit command signal
+                            if command and command != self.last_command:
+                                debug(f"Command detected: {command}")
+                                self.command_detected.emit(command)
+                                with self._lock:
+                                    self.last_command = command
 
-                    except Exception as e:
-                        print(f"Detection error: {e}")
-                        # Emit empty status to indicate detection failure
+                        except Exception as e:
+                            error(f"Detection error: {e}")
+                            # Emit empty status to indicate detection failure
+                            self.detection_status.emit({})
+                    else:
+                        # If detection is disabled, emit empty status
                         self.detection_status.emit({})
+
+                    # Emit frame ready signal
+                    self.frame_ready.emit(processed_frame)
+
+                    time.sleep(0.03)  # ~30 FPS
                 else:
-                    # If detection is disabled, emit empty status
-                    self.detection_status.emit({})
+                    # If we can't read a frame, stop the capture
+                    debug("Cannot read frame from camera, stopping capture")
+                    break
+            except Exception as e:
+                error(f"Error in camera capture loop: {e}")
+                break
 
-                # Emit frame ready signal
-                self.frame_ready.emit(processed_frame)
+        # Release resources when thread exits
+        self._safe_release_capture()
+        self.finished.emit()
 
-                time.sleep(0.03)  # ~30 FPS
-
-        # Clean up resources
-        if self.cap:
-            self.cap.release()
-            self.cap = None
-
-        # Release MediaPipe resources
+    def __del__(self):
+        """Ensure resources are released when object is destroyed"""
         try:
-            self.eye_detector.close()
+            self._safe_release_capture()
         except:
             pass
-
-        print("Camera thread exited")
-        self.finished.emit()
