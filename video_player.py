@@ -1,6 +1,7 @@
 import cv2
 import time
 import os
+import threading
 from PySide6.QtCore import QThread, Signal
 from log import debug, info, warning, error, critical  # Import logging functions
 
@@ -27,28 +28,32 @@ class VideoPlayerThread(QThread):
         # Add exit flag
         self.exiting = False
         self.target_frame = -1  # New: store target frame number
+        self._closed = True  # Track whether resources have been released
+        self._lock = threading.RLock()  # Reentrant lock for resource protection
 
     def load_video(self, file_path):
         """Load video file"""
         try:
             debug(f"Attempting to load video: {file_path}")
             
-            # If a video is already loaded, release it first
-            if self.cap:
-                debug("Releasing existing video capture")
-                self.cap.release()
-                self.cap = None
+            # Always release existing video capture before loading a new one
+            self._safe_release_capture()
                 
-            self.cap = cv2.VideoCapture(file_path)
-            if not self.cap.isOpened():
-                error(f"Cannot open video file: {file_path}")
-                return False
+            with self._lock:
+                # Create new capture
+                self.cap = cv2.VideoCapture(file_path)
+                if not self.cap.isOpened():
+                    error(f"Cannot open video file: {file_path}")
+                    self.cap = None
+                    self._closed = True
+                    return False
 
-            self.current_file = file_path
-            self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            self.video_fps = self.cap.get(cv2.CAP_PROP_FPS)
-            self.video_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            self.video_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                self.current_file = file_path
+                self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                self.video_fps = self.cap.get(cv2.CAP_PROP_FPS)
+                self.video_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                self.video_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                self._closed = False  # Mark resources as active
 
             # Ensure frame rate is valid
             if self.video_fps <= 0:
@@ -78,105 +83,209 @@ class VideoPlayerThread(QThread):
             return True
         except Exception as e:
             error(f"Failed to load video: {e}")
+            with self._lock:
+                self._safe_release_capture()
             return False
 
     def play(self):
         """Start playback"""
-        self.playing = True
-        self.paused = False
-        self.stopped = False
+        with self._lock:
+            self.playing = True
+            self.paused = False
+            self.stopped = False
 
     def pause(self):
         """Pause playback"""
         debug(f"Pausing playback for video: {self.current_file}")
-        self.paused = True
+        with self._lock:
+            self.paused = True
 
     def stop(self):
         """Stop playback"""
         debug(f"Stopping playback for video: {self.current_file}")
-        self.playing = False
-        self.paused = False
-        self.stopped = True
-        self.current_frame = 0
-        if self.cap:
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        with self._lock:
+            self.playing = False
+            self.paused = False
+            self.stopped = True
+            self.current_frame = 0
+            if self.cap and not self._closed:
+                try:
+                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                except Exception as e:
+                    error(f"Error resetting video position: {e}")
 
     def get_position(self):
         """Get current playback position"""
-        if self.cap and self.total_frames > 0:
-            return self.current_frame / self.total_frames
+        with self._lock:
+            if self.cap and not self._closed and self.total_frames > 0:
+                return self.current_frame / self.total_frames
         return 0
+
+    def _safe_release_capture(self):
+        """Safely release video capture resources with multiple safety checks"""
+        try:
+            with self._lock:
+                if self.cap is not None:
+                    try:
+                        if not self._closed:
+                            debug("Releasing video capture")
+                            self.cap.release()
+                    except Exception as e:
+                        error(f"Error releasing video capture: {e}")
+                    finally:
+                        self.cap = None
+                        self._closed = True
+                else:
+                    # Even if cap is None, mark as closed
+                    self._closed = True
+        except Exception as e:
+            error(f"Error in _safe_release_capture: {e}")
+        finally:
+            with self._lock:
+                self.cap = None
+                self._closed = True
 
     def run(self):
         """Main playback loop"""
         while not self.exiting:
             # Handle seek requests
-            if self.target_frame >= 0 and self.cap and 0 <= self.target_frame < self.total_frames:
-                self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.target_frame)
-                self.current_frame = self.target_frame
-                self.target_frame = -1  # Reset target frame
+            target_frame_handled = False
+            with self._lock:
+                if (self.target_frame >= 0 and self.cap is not None and not self._closed and 
+                    0 <= self.target_frame < self.total_frames):
+                    try:
+                        if self.cap is not None:
+                            self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.target_frame)
+                            self.current_frame = self.target_frame
+                            target_frame_handled = True
+                    except Exception as e:
+                        error(f"Error seeking to frame {self.target_frame}: {e}")
+            
+            if target_frame_handled:
+                with self._lock:
+                    self.target_frame = -1  # Reset target frame
 
-            if self.stopped:
+            # Check various states
+            stopped_state = False
+            paused_state = False
+            playing_state = False
+            with self._lock:
+                stopped_state = self.stopped
+                paused_state = self.paused
+                playing_state = self.playing
+
+            if stopped_state:
                 debug("Playback stopped, waiting...")
                 time.sleep(0.1)
                 continue
 
-            if not self.playing or self.paused:
+            if not playing_state or paused_state:
                 debug("Playback paused or not playing, waiting...")
                 time.sleep(0.1)
                 continue
 
-            if self.cap and self.cap.isOpened():
-                ret, frame = self.cap.read()
-                if ret:
-                    self.current_frame += 1
-                    self.frame_ready.emit(frame)
+            # Check if capture is available
+            cap_available = False
+            with self._lock:
+                cap_available = self.cap is not None and not self._closed
+                if cap_available:
+                    try:
+                        cap_available = self.cap.isOpened()
+                    except:
+                        cap_available = False
+                        
+            if cap_available:
+                try:
+                    ret, frame = None, None
+                    cap_valid = False
+                    with self._lock:
+                        cap_valid = self.cap is not None and not self._closed
+                    
+                    if cap_valid:
+                        try:
+                            ret, frame = self.cap.read()
+                        except Exception as e:
+                            error(f"Error reading frame: {e}")
+                            ret = False
+                            
+                    if ret and frame is not None:
+                        with self._lock:
+                            self.current_frame += 1
+                            
+                        # Emit frame without holding the lock
+                        self.frame_ready.emit(frame)
 
-                    # Control playback speed
-                    sleep_time = 1.0 / self.video_fps
-                    time.sleep(sleep_time)
+                        # Control playback speed
+                        sleep_time = 1.0 / self.video_fps if self.video_fps > 0 else 0.033
+                        time.sleep(sleep_time)
 
-                    # Check if playback is finished
-                    if self.current_frame >= self.total_frames:
-                        debug("Playback finished")
+                        # Check if playback is finished
+                        finished = False
+                        total_frames = 0
+                        with self._lock:
+                            total_frames = self.total_frames
+                            if self.current_frame >= total_frames:
+                                finished = True
+                                
+                        if finished and total_frames > 0:
+                            debug("Playback finished")
+                            with self._lock:
+                                self.playing = False
+                                self.stopped = True
+                                self.current_frame = 0
+                                if self.cap is not None and not self._closed:
+                                    try:
+                                        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                                    except Exception as e:
+                                        error(f"Error resetting video position: {e}")
+                            self.playback_finished.emit()
+                    else:
+                        # Playback finished or error occurred
+                        debug("Playback finished (no more frames or error)")
+                        with self._lock:
+                            self.playing = False
+                            self.stopped = True
+                            self.current_frame = 0
+                            
+                            if self.cap is not None and not self._closed:
+                                try:
+                                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                                except Exception as e:
+                                    error(f"Error resetting video position: {e}")
+                        self.playback_finished.emit()
+                except Exception as e:
+                    error(f"Error during video playback: {e}")
+                    with self._lock:
                         self.playing = False
                         self.stopped = True
-                        self.current_frame = 0
-                        if self.cap:
-                            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                        self.playback_finished.emit()
-                else:
-                    # Playback finished
-                    debug("Playback finished (no more frames)")
-                    self.playing = False
-                    self.stopped = True
-                    self.current_frame = 0
-                    
-                    if self.cap:
-                        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     self.playback_finished.emit()
             else:
                 debug("Video capture not opened or failed")
                 time.sleep(0.1)
 
-        # Clean up resources
-        if self.cap:
-            debug("Cleaning up video capture resources")
-            self.cap.release()
-            self.cap = None
-
+        # Clean up resources when exiting
+        self._safe_release_capture()
         debug("Video player thread exited")
 
     def shutdown(self):
         """Safely shut down thread"""
         debug("Shutting down video player thread")
-        self.exiting = True
-        self.playing = False
-        self.paused = False
-        self.stopped = True
+        with self._lock:
+            self.exiting = True
+            self.playing = False
+            self.paused = False
+            self.stopped = True
 
     def seek(self, frame_number):
         """Seek to specific frame"""
         debug(f"Requesting seek to frame: {frame_number}")
-        if self.cap and 0 <= frame_number < self.total_frames:
-            self.target_frame = frame_number
+        with self._lock:
+            if self.cap is not None and not self._closed and 0 <= frame_number < self.total_frames:
+                self.target_frame = frame_number
+
+    def __del__(self):
+        """Ensure resources are released when object is destroyed"""
+        try:
+            self._safe_release_capture()
+        except:
+            pass

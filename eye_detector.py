@@ -61,9 +61,26 @@ class MediaPipeEyeDetector:
         self.frame_count = 0
         self.start_time = time.time()
         self.fps = 0
+        self._closed = False  # Track whether resources have been released
     
         print("Using MediaPipe eye detector (blinking during gaze does not affect video playback)")
     
+    def close(self):
+        """Release MediaPipe resources"""
+        try:
+            if self.face_mesh and not self._closed:
+                self.face_mesh.close()
+                self._closed = True
+                print("MediaPipe resources released")
+        except Exception as e:
+            print(f"Error releasing MediaPipe resources: {e}")
+        finally:
+            self._closed = True
+            
+    def __del__(self):
+        """Ensure resources are released when object is destroyed"""
+        self.close()
+            
     def calculate_ear(self, eye_landmarks):
         """Calculate Eye Aspect Ratio (EAR) using standard 6-point method"""
         p1, p2, p3, p4, p5, p6 = eye_landmarks
@@ -189,7 +206,11 @@ class MediaPipeEyeDetector:
         }
         
         # Process frame
-        results = self.face_mesh.process(rgb_frame)
+        try:
+            results = self.face_mesh.process(rgb_frame)
+        except Exception as e:
+            print(f"Error processing frame with MediaPipe: {e}")
+            return detection_result
         
         if not results.multi_face_landmarks:
             self.eye_state = "open"

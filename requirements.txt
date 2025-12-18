@@ -1,0 +1,6 @@
+pip install "numpy==1.24.3"#
+pip install "opencv-python==4.8.1.78"
+#pip install "opencv-contrib-python==4.8.1.78"
+pip install "mediapipe==0.10.9"
+pip install "protobuf==3.20.3"
+pip install "PySide6==6.5.3"
