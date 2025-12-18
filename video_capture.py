@@ -162,19 +162,3 @@ class VideoCaptureThread(QThread):
                 self.frame_ready.emit(processed_frame)
 
                 time.sleep(0.03)  # ~30 FPS
-
-        # Clean up resources
-        if self.cap:
-            debug("Cleaning up camera capture resources")
-            self.cap.release()
-            self.cap = None
-
-        # Release MediaPipe resources
-        try:
-            debug("Closing MediaPipe eye detector")
-            self.eye_detector.close()
-        except:
-            pass
-
-        debug("Camera thread exited")
-        self.finished.emit()
