@@ -87,7 +87,6 @@ class VideoCaptureThread(QThread):
         self.start()
 
     def stop_capture(self):
-        """Improved stop method"""
         debug("Stopping camera capture...")
         with self._lock:
             self.running = False

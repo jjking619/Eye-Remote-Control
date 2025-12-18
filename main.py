@@ -18,8 +18,6 @@ from video_capture import VideoCaptureThread
 from video_player import VideoPlayerThread
 from fullscreen_player_mode import FullScreenPlayer
 import time
-from log import info, debug, error, warning, critical
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -538,6 +536,14 @@ class MainWindow(QMainWindow):
         self.detect_status.setText("Camera Off")
         self.detect_status.setStyleSheet("background-color: #f38ba8; color: #000000;")
         
+        # Also stop video playback when camera is turned off
+        if self.video_loaded:
+            self.video_player_thread.stop()
+            self.video_status.setText("Stopped")
+            self.video_status.setStyleSheet("background-color: #f38ba8; color: #000000;")
+            self.progress_slider.setValue(0)
+            if hasattr(self, 'video_duration'):
+                self.update_time_label(0, self.video_duration)
     def on_video_stopped(self):
         self.camera_active = False
         
@@ -561,6 +567,10 @@ class MainWindow(QMainWindow):
         if file_path:
             self.current_video_file = file_path
             
+            # Stop any currently playing video
+            if self.video_loaded:
+                self.video_player_thread.stop()
+            
             if self.video_player_thread.load_video(file_path):
                 self.video_loaded = True
                 self.video_status.setText("Loaded")
@@ -572,11 +582,17 @@ class MainWindow(QMainWindow):
                     if ret:
                         self.display_video_frame(frame)
                     cap.release()
+                
+                # Reset progress slider and time label to start
+                self.progress_slider.setValue(0)
+                if hasattr(self, 'video_duration'):
+                    self.update_time_label(0, self.video_duration)
             else:
                 self.video_loaded = False
                 self.video_status.setText("Load Failed")
                 self.video_status.setStyleSheet("background-color: #f38ba8; color: #000000;")
                 QMessageBox.warning(self, "Failure", f"Cannot load video: {os.path.basename(file_path)}")
+                
     def update_video_info(self, video_info):
         """Update video information display"""
         filename = video_info['filename']
@@ -730,78 +746,78 @@ class MainWindow(QMainWindow):
         self.video_status.setStyleSheet("background-color: #a6e3a1; color: #000000;")
         self.progress_slider.setValue(1000)
         
-        # 自动查找并播放下一个视频文件
+        # Automatically find and play the next video file
         self.play_next_video()
         
     def play_next_video(self):
-        """查找并播放下一个MP4文件"""
+        """Find and play the next MP4 file"""
         if not self.current_video_file:
             return
             
-        # 获取当前视频所在目录
+        # Get the directory of the current video
         current_dir = os.path.dirname(self.current_video_file)
         if not current_dir:
             current_dir = "."
             
-        # 如果没有指定目录，则使用当前工作目录
+        # If no directory is specified, use the current working directory
         if current_dir == ".":
             current_dir = os.getcwd()
             
-        # 查找目录中所有的MP4文件
+        # Find all MP4 files in the directory
         try:
             video_files = []
             for file in os.listdir(current_dir):
                 if file.lower().endswith('.mp4'):
                     video_files.append(file)
                     
-            # 如果没有找到MP4文件，则返回
+            # If no MP4 files are found, return
             if not video_files:
                 return
                 
-            # 对文件进行排序
+            # Sort the files
             video_files.sort()
             
-            # 找到当前播放的文件在列表中的位置
+            # Find the position of the currently playing file in the list
             current_filename = os.path.basename(self.current_video_file)
             try:
                 current_index = video_files.index(current_filename)
-                # 计算下一个文件的索引（循环播放）
+                # Calculate the index of the next file (loop playback)
                 next_index = (current_index + 1) % len(video_files)
                 next_video = video_files[next_index]
             except ValueError:
-                # 如果当前文件不在列表中，则播放第一个文件
+                # If the current file is not in the list, play the first file
                 next_video = video_files[0]
                 
-            # 构建完整的文件路径
+            # Build the full file path
             next_video_path = os.path.join(current_dir, next_video)
             
-            # 检查文件是否存在
+            # Check if the file exists
             if not os.path.exists(next_video_path):
                 self.statusBar().showMessage(f"Next video file not found: {next_video}")
                 return
             
-            # 在加载新视频前确保当前视频资源已被释放
+            # Before loading a new video, make sure the current video resources have been released
             if self.video_player_thread:
-                # 先停止当前播放
+                # First stop the current playback
                 self.video_player_thread.stop()
                 
-                # 等待一小段时间确保资源释放
+                # Wait a short time to ensure resources are released
                 time.sleep(0.1)
             
-            # 加载并播放下一个视频
+            # Load and play the next video
             if self.video_player_thread.load_video(next_video_path):
                 self.current_video_file = next_video_path
                 self.video_loaded = True
                 self.video_status.setText("Auto Playing")
                 self.video_status.setStyleSheet("background-color: #89b4fa; color: #000000;")
                 
-                # 确保视频播放器处于正确状态
+                # Ensure the video player is in the correct state
                 self.video_player_thread.play()
                 
-                # 显示消息
+                # Show message
                 self.statusBar().showMessage(f"Auto-playing next video: {next_video}")
                 
-                # 如果在全屏模式下，也需要更新全屏播放器
+                # If in fullscreen mode, update the fullscreen player as well
                 if self.is_in_fullscreen_mode and self.fullscreen_player:
                     self.fullscreen_player.play_pause_btn.setText("Pause")
                     self.fullscreen_player.show_status(f"Auto-playing: {next_video}")
@@ -812,7 +828,7 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage("Failed to auto-play next video")
                 
         except Exception as e:
-            error(f"Error finding next video: {e}")
+            # Error finding next video
             self.statusBar().showMessage("Error occurred while finding next video")
         
     def update_status(self):
@@ -859,7 +875,7 @@ class MainWindow(QMainWindow):
         
     def closeEvent(self, event):
         """Window close event - improved version""" 
-        print("Closing application, cleaning up resources...")
+        # Closing application, cleaning up resources
         # If fullscreen player exists, close it first
         if self.fullscreen_player:
             try:
@@ -880,15 +896,16 @@ class MainWindow(QMainWindow):
         # Stop camera thread
         try:
             if hasattr(self, 'video_thread'):
-                print("Stopping camera thread...")
+                # Stopping camera thread
                 self.video_thread.stop_capture()
         except Exception as e:
-            print(f"Error stopping camera thread: {e}")
+            # Error stopping camera thread
+            pass
         
         # Stop video player thread
         try:
             if hasattr(self, 'video_player_thread'):
-                print("Stopping video player thread...")
+                # Stopping video player thread
                 self.video_player_thread.shutdown()  # Use new shutdown method
                 
                 # Wait for thread to finish
@@ -896,7 +913,8 @@ class MainWindow(QMainWindow):
                     self.video_player_thread.quit()
                     self.video_player_thread.wait(3000)  # Wait up to 3 seconds
         except Exception as e:
-            print(f"Error stopping video player thread: {e}")
+            # Error stopping video player thread
+            pass
         
         # Force close MediaPipe related resources (if possible)
         try:
@@ -906,7 +924,8 @@ class MainWindow(QMainWindow):
                 hasattr(self.video_thread.eye_detector, 'close')):
                 self.video_thread.eye_detector.close()
         except Exception as e:
-            print(f"Error closing MediaPipe resources: {e}")
+            # Error closing MediaPipe resources
+            pass
         
         # Ensure all OpenCV resources are released
         try:
@@ -914,7 +933,7 @@ class MainWindow(QMainWindow):
         except:
             pass
         
-        print("Resource cleanup completed")
+        # Resource cleanup completed
         event.accept()
 
 def main():
