@@ -256,5 +256,5 @@ class VideoCaptureThread(QThread):
         """Ensure resources are released when object is destroyed"""
         try:
             self._safe_release_capture()
-        except:
+        except Exception as e :
             error(f"Error release resources: {e}")
