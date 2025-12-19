@@ -3,7 +3,7 @@ import numpy as np
 from collections import deque
 import time
 import mediapipe as mp
-
+from log import error
 class MediaPipeEyeDetector:
     def __init__(self):
         # Initialize MediaPipe Face Mesh
@@ -70,10 +70,8 @@ class MediaPipeEyeDetector:
             if self.face_mesh and not self._closed:
                 self.face_mesh.close()
                 self._closed = True
-                # MediaPipe resources released
         except Exception as e:
-            # Error releasing MediaPipe resources
-            pass
+            error(f"Error releasing MediaPipe resources: {e}")
         finally:
             self._closed = True
             
@@ -148,7 +146,7 @@ class MediaPipeEyeDetector:
         return self.eye_state
     
     def update_gazing_state(self, position_variance):
-        """Update gaze state machine - simplified version based only on head stability"""
+        """Update gaze state machine based on position variance"""
         is_stable = position_variance < self.GAZING_STABILITY_THRESHOLD
         
         if self.gazing_state == "not_gazing":
@@ -209,7 +207,7 @@ class MediaPipeEyeDetector:
         try:
             results = self.face_mesh.process(rgb_frame)
         except Exception as e:
-            # Error processing frame with MediaPipe
+            error(f"Error processing frame with MediaPipe: {e}")
             return detection_result
         
         if not results.multi_face_landmarks:

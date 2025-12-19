@@ -175,12 +175,11 @@ class VideoPlayerThread(QThread):
                 playing_state = self.playing
 
             if stopped_state:
-                debug("Playback stopped, waiting...")
                 time.sleep(0.1)
                 continue
 
             if not playing_state or paused_state:
-                debug("Playback paused or not playing, waiting...")
+                debug("Playback paused, waiting...")
                 time.sleep(0.1)
                 continue
 
@@ -287,5 +286,5 @@ class VideoPlayerThread(QThread):
         """Ensure resources are released when object is destroyed"""
         try:
             self._safe_release_capture()
-        except:
-            pass
+        except Exception as e:
+            error(f"Error delete resources: {e}")

@@ -56,7 +56,7 @@ class VideoCaptureThread(QThread):
                     try:
                         temp_cap.release()
                     except:
-                        pass
+                        error(f"Error temp_cap.release(): {e}")
         error("No available camera device found")
         return None
 
@@ -185,7 +185,6 @@ class VideoCaptureThread(QThread):
                             # Emit detection status
                             self.detection_status.emit(detection_result)
 
-                            # Handle actions according to new control logic
                             # When playing video, continue playing if eyes are gazing at screen, 
                             command = None
                             face_detected = detection_result.get('face_detected', False)
@@ -202,7 +201,6 @@ class VideoCaptureThread(QThread):
                                 is_gazing = detection_result.get('is_gazing', False)
 
                                 # Pause if eyes are closed or not gazing
-                                # The eye detector already handles short blinks appropriately
                                 if eyes_closed or not is_gazing:
                                     command = "pause"
                                 else:
@@ -244,7 +242,7 @@ class VideoCaptureThread(QThread):
                     time.sleep(0.03)  # ~30 FPS
                 else:
                     # If we can't read a frame, stop the capture
-                    debug("Cannot read frame from camera, stopping capture")
+                    error("Cannot read frame from camera, stopping capture")
                     break
             except Exception as e:
                 error(f"Error in camera capture loop: {e}")
@@ -259,4 +257,4 @@ class VideoCaptureThread(QThread):
         try:
             self._safe_release_capture()
         except:
-            pass
+            error(f"Error release resources: {e}")

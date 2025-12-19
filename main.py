@@ -1,6 +1,7 @@
 import sys
 import cv2
 import os
+import time
 from datetime import datetime
 
 from PySide6.QtWidgets import (
@@ -17,7 +18,8 @@ sys.path.append(os.path.dirname(__file__))
 from video_capture import VideoCaptureThread
 from video_player import VideoPlayerThread
 from fullscreen_player_mode import FullScreenPlayer
-import time
+from log  import error
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -828,7 +830,7 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage("Failed to auto-play next video")
                 
         except Exception as e:
-            # Error finding next video
+            error(f" Error finding next video: {e}")
             self.statusBar().showMessage("Error occurred while finding next video")
         
     def update_status(self):
@@ -880,8 +882,8 @@ class MainWindow(QMainWindow):
         if self.fullscreen_player:
             try:
                 self.fullscreen_player.close()
-            except:
-                pass
+            except Exception as e:
+                error(f"Error closing fullscreen player: {e}")
             self.fullscreen_player = None
             
         # Stop timers
@@ -890,8 +892,8 @@ class MainWindow(QMainWindow):
                 self.status_timer.stop()
             if hasattr(self, 'progress_timer'):
                 self.progress_timer.stop()
-        except:
-            pass
+        except Exception as e:
+            error(f"Error Stop timers : {e}")
         
         # Stop camera thread
         try:
@@ -899,8 +901,7 @@ class MainWindow(QMainWindow):
                 # Stopping camera thread
                 self.video_thread.stop_capture()
         except Exception as e:
-            # Error stopping camera thread
-            pass
+            error(f"Error stopping camera thread : {e}")
         
         # Stop video player thread
         try:
@@ -913,8 +914,7 @@ class MainWindow(QMainWindow):
                     self.video_player_thread.quit()
                     self.video_player_thread.wait(3000)  # Wait up to 3 seconds
         except Exception as e:
-            # Error stopping video player thread
-            pass
+            error(f"Error stopping video player thread: {e}")
         
         # Force close MediaPipe related resources (if possible)
         try:
@@ -924,14 +924,13 @@ class MainWindow(QMainWindow):
                 hasattr(self.video_thread.eye_detector, 'close')):
                 self.video_thread.eye_detector.close()
         except Exception as e:
-            # Error closing MediaPipe resources
-            pass
+            error(f"Error closing MediaPipe resources: {e}")
         
         # Ensure all OpenCV resources are released
         try:
             cv2.destroyAllWindows()
         except:
-            pass
+            error(f"Error release OpenCV resources: {e}")
         
         # Resource cleanup completed
         event.accept()
