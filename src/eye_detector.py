@@ -16,7 +16,6 @@ class MediaPipeEyeDetector:
             min_tracking_confidence=0.5
         )        
         
-        
         # Indices of 6 key points for standard EAR calculation
         self.LEFT_EYE_INDICES = [33, 159, 158, 133, 153, 145]  # Order: p1, p2, p3, p4, p5, p6
         self.RIGHT_EYE_INDICES = [362, 386, 385, 263, 380, 374]  # Order: p1, p2, p3, p4, p5, p6
@@ -401,5 +400,5 @@ class MediaPipeEyeDetector:
                        (10, frame.shape[0] - 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
             
             # Display FPS
-            cv2.putText(frame, f"FPS: {detection_result['fps']:.1f}", (10, 30),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            # cv2.putText(frame, f"FPS: {detection_result['fps']:.1f}", (10, 30),
+            #            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)

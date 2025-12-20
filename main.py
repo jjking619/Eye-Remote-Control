@@ -205,7 +205,7 @@ class MainWindow(QMainWindow):
                 background-color: #74c7ec;
             }
         """)
-         # New: Fullscreen play button
+         #  Fullscreen play button
         self.fullscreen_play_btn = QPushButton("🎬 Fullscreen Play Mode")
         self.fullscreen_play_btn.setFixedSize(200, 30)
         self.fullscreen_play_btn.clicked.connect(self.enter_fullscreen_play_mode)
@@ -877,7 +877,7 @@ class MainWindow(QMainWindow):
         self.fullscreen_player.show_status("Entered fullscreen play mode")
         
     def closeEvent(self, event):
-        """Window close event - improved version""" 
+        """Window close event """ 
         # Closing application, cleaning up resources
         # If fullscreen player exists, close it first
         if self.fullscreen_player:

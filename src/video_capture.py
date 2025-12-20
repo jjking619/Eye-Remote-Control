@@ -3,7 +3,7 @@ import time
 import threading
 from PySide6.QtCore import QThread, Signal
 from eye_detector import MediaPipeEyeDetector
-from log import debug, error
+from log import debug,error
 
 
 class VideoCaptureThread(QThread):

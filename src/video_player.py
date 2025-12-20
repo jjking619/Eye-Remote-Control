@@ -3,15 +3,13 @@ import time
 import os
 import threading
 from PySide6.QtCore import QThread, Signal
-from log import debug, error  # 移除了未使用的 info, warning, critical 导入
+from log import debug, error 
 
 class VideoPlayerThread(QThread):
     """Video player thread"""
     frame_ready = Signal(object)
     playback_finished = Signal()
     video_info_ready = Signal(dict)  # Emit video information
-    # 移除了未使用的 seek_requested 信号
-
     def __init__(self):
         super().__init__()
         self.cap = None
@@ -37,8 +35,16 @@ class VideoPlayerThread(QThread):
             debug(f"Attempting to load video: {file_path}")
             
             # Always release existing video capture before loading a new one
-            self._safe_release_capture()
-                
+            with self._lock:
+                if self.cap is not None and not self._closed:
+                    try:
+                        self.cap.release()
+                    except Exception as e:
+                        error(f"Error releasing video capture: {e}")
+                    finally:
+                        self.cap = None
+                        self._closed = True
+            
             with self._lock:
                 # Create new capture
                 self.cap = cv2.VideoCapture(file_path)
@@ -278,13 +284,3 @@ class VideoPlayerThread(QThread):
     def seek(self, frame_number):
         """Seek to specific frame"""
         debug(f"Requesting seek to frame: {frame_number}")
-        with self._lock:
-            if self.cap is not None and not self._closed and 0 <= frame_number < self.total_frames:
-                self.target_frame = frame_number
-
-    def __del__(self):
-        """Ensure resources are released when object is destroyed"""
-        try:
-            self._safe_release_capture()
-        except Exception as e:
-            error(f"Error delete resources: {e}")
