@@ -13,12 +13,13 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QImage, QPixmap
 
 # Import existing modules
-sys.path.append(os.path.dirname(__file__))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))  # Add src directory to path
 
-from video_capture import VideoCaptureThread
-from video_player import VideoPlayerThread
-from fullscreen_player_mode import FullScreenPlayer
-from log  import error
+from src.eye_detector import MediaPipeEyeDetector
+from src.video_capture import VideoCaptureThread
+from src.video_player import VideoPlayerThread
+from src.fullscreen_player_mode import FullScreenPlayer
+from src.log  import error
 
 class MainWindow(QMainWindow):
     def __init__(self):
