@@ -1,75 +1,88 @@
-import cv2
 import time
 import os
 import threading
+import vlc
+from moviepy.editor import VideoFileClip
 from PySide6.QtCore import QThread, Signal
 from log import debug, error 
 
 class VideoPlayerThread(QThread):
-    """Video player thread"""
+    """Video player thread using MoviePy for video frames and VLC for audio"""
     frame_ready = Signal(object)
     playback_finished = Signal()
-    video_info_ready = Signal(dict)  # Emit video information
+    video_info_ready = Signal(dict)
+    
     def __init__(self):
         super().__init__()
-        self.cap = None
+        self.clip = None
+        self.current_file = ""
         self.playing = False
         self.paused = False
         self.stopped = True
-        self.current_file = ""
         self.video_fps = 30
-        self.current_frame = 0
         self.total_frames = 0
         self.video_width = 0
         self.video_height = 0
         self.video_duration = 0
-        # Add exit flag
         self.exiting = False
-        self.target_frame = -1
-        self._closed = True  # Track whether resources have been released
-        self._lock = threading.RLock()  # Reentrant lock for resource protection
+        self.current_frame = 0
+        self.last_frame_time = 0
+        self._lock = threading.RLock()
+        
+        # VLC player for audio
+        self.vlc_instance = None
+        self.vlc_player = None
+        self._initialize_vlc()
+
+    def _initialize_vlc(self):
+        """Initialize VLC instance and player"""
+        try:
+            # Create VLC instance with options for audio only playback
+            self.vlc_instance = vlc.Instance('--no-video', '--quiet')
+            self.vlc_player = self.vlc_instance.media_player_new()
+            debug("VLC initialized successfully")
+        except Exception as e:
+            error(f"Failed to initialize VLC: {e}")
+            self.vlc_instance = None
+            self.vlc_player = None
 
     def load_video(self, file_path):
-        """Load video file"""
+        """Load video file using MoviePy for video frames and VLC for audio"""
         try:
             debug(f"Attempting to load video: {file_path}")
             
-            # Always release existing video capture before loading a new one
             with self._lock:
-                if self.cap is not None and not self._closed:
-                    try:
-                        self.cap.release()
-                    except Exception as e:
-                        error(f"Error releasing video capture: {e}")
-                    finally:
-                        self.cap = None
-                        self._closed = True
-            
-            with self._lock:
-                # Create new capture
-                self.cap = cv2.VideoCapture(file_path)
-                if not self.cap.isOpened():
-                    error(f"Cannot open video file: {file_path}")
-                    self.cap = None
-                    self._closed = True
-                    return False
-
+                # Release existing clip
+                if self.clip:
+                    self.clip.close()
+                    self.clip = None
+                
+                # Stop any playing media in VLC
+                if self.vlc_player:
+                    self.vlc_player.stop()
+                
+                # Load new clip for frame extraction
+                self.clip = VideoFileClip(file_path)
+                
                 self.current_file = file_path
-                self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                self.video_fps = self.cap.get(cv2.CAP_PROP_FPS)
-                self.video_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                self.video_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                self._closed = False  # Mark resources as active
+                self.video_duration = self.clip.duration
+                self.video_fps = self.clip.fps if self.clip.fps else 30
+                self.total_frames = int(self.video_duration * self.video_fps)
+                
+                if self.clip.size:
+                    self.video_width, self.video_height = self.clip.size
+                else:
+                    self.video_width, self.video_height = 1920, 1080
+                
+                self.stopped = True
+                self.playing = False
+                self.paused = False
+                self.current_frame = 0
 
-            # Ensure frame rate is valid
-            if self.video_fps <= 0:
-                self.video_fps = 30  # Default value
-
-            # Calculate video duration
-            if self.video_fps > 0 and self.total_frames > 0:
-                self.video_duration = self.total_frames / self.video_fps
-            else:
-                self.video_duration = 0
+                # Load media into VLC player
+                if self.vlc_player and self.vlc_instance:
+                    media = self.vlc_instance.media_new(file_path)
+                    self.vlc_player.set_media(media)
 
             # Prepare video information
             video_info = {
@@ -84,13 +97,10 @@ class VideoPlayerThread(QThread):
 
             # Emit video information
             self.video_info_ready.emit(video_info)
-            debug(f"Successfully loaded video: {file_path}, total frames: {self.total_frames}")
-
+            debug(f"Successfully loaded video: {file_path}")
             return True
         except Exception as e:
             error(f"Failed to load video: {e}")
-            with self._lock:
-                self._safe_release_capture()
             return False
 
     def play(self):
@@ -99,177 +109,132 @@ class VideoPlayerThread(QThread):
             self.playing = True
             self.paused = False
             self.stopped = False
+            self.last_frame_time = time.time()
+            
+            # Start VLC audio if available
+            if self.vlc_player:
+                try:
+                    # Calculate correct audio position based on current frame
+                    position = self.current_frame / self.total_frames if self.total_frames > 0 else 0
+                    # Set position and play
+                    self.vlc_player.set_position(position)
+                    self.vlc_player.play()
+                    debug("VLC audio playback started")
+                except Exception as e:
+                    error(f"Failed to start VLC audio playback: {e}")
 
     def pause(self):
         """Pause playback"""
-        debug(f"Pausing playback for video: {self.current_file}")
         with self._lock:
             self.paused = True
+            # Pause VLC audio
+            if self.vlc_player:
+                try:
+                    self.vlc_player.pause()
+                    debug("VLC audio paused")
+                except Exception as e:
+                    error(f"Failed to pause VLC audio: {e}")
 
     def stop(self):
         """Stop playback"""
-        debug(f"Stopping playback for video: {self.current_file}")
         with self._lock:
             self.playing = False
             self.paused = False
             self.stopped = True
             self.current_frame = 0
-            if self.cap and not self._closed:
+            
+            # Stop VLC audio
+            if self.vlc_player:
                 try:
-                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    self.vlc_player.stop()
+                    debug("VLC audio stopped")
                 except Exception as e:
-                    error(f"Error resetting video position: {e}")
+                    error(f"Failed to stop VLC audio: {e}")
 
     def get_position(self):
-        """Get current playback position"""
+        """Get current playback position (0.0 to 1.0)"""
         with self._lock:
-            if self.cap and not self._closed and self.total_frames > 0:
+            if self.total_frames > 0:
                 return self.current_frame / self.total_frames
-        return 0
+        return 0.0
 
-    def _safe_release_capture(self):
-        """Safely release video capture resources with multiple safety checks"""
-        try:
-            with self._lock:
-                if self.cap is not None:
-                    try:
-                        if not self._closed:
-                            debug("Releasing video capture")
-                            self.cap.release()
-                    except Exception as e:
-                        error(f"Error releasing video capture: {e}")
-                    finally:
-                        self.cap = None
-                        self._closed = True
-                else:
-                    # Even if cap is None, mark as closed
-                    self._closed = True
-        except Exception as e:
-            error(f"Error in _safe_release_capture: {e}")
-        finally:
-            with self._lock:
-                self.cap = None
-                self._closed = True
+    def seek(self, frame_number):
+        """Seek to specific frame"""
+        with self._lock:
+            frame_number = max(0, min(frame_number, self.total_frames - 1))
+            self.current_frame = frame_number
+            # When seeking, we need to update VLC position too
+            if self.vlc_player:
+                try:
+                    # For seeking, we temporarily pause, set position, then resume if needed
+                    was_playing = self.playing and not self.paused
+                    if was_playing:
+                        self.vlc_player.pause()
+                    
+                    position = frame_number / self.total_frames if self.total_frames > 0 else 0
+                    self.vlc_player.set_position(position)
+                    
+                    if was_playing:
+                        self.vlc_player.play()
+                        
+                except Exception as e:
+                    error(f"Failed to seek VLC audio: {e}")
 
     def run(self):
         """Main playback loop"""
         while not self.exiting:
-            # Handle seek requests
-            target_frame_handled = False
             with self._lock:
-                if (self.target_frame >= 0 and self.cap is not None and not self._closed and 
-                    0 <= self.target_frame < self.total_frames):
-                    try:
-                        if self.cap is not None:
-                            self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.target_frame)
-                            self.current_frame = self.target_frame
-                            target_frame_handled = True
-                    except Exception as e:
-                        error(f"Error seeking to frame {self.target_frame}: {e}")
-            
-            if target_frame_handled:
-                with self._lock:
-                    self.target_frame = -1  # Reset target frame
-
-            # Check various states
-            stopped_state = False
-            paused_state = False
-            playing_state = False
-            with self._lock:
-                stopped_state = self.stopped
-                paused_state = self.paused
-                playing_state = self.playing
-
-            if stopped_state:
-                time.sleep(0.1)
+                playing = self.playing
+                paused = self.paused
+                stopped = self.stopped
+                
+            if stopped or not playing or paused:
+                time.sleep(0.01)
                 continue
-
-            if not playing_state or paused_state:
-                debug("Playback paused, waiting...")
-                time.sleep(0.1)
+                
+            if not self.clip:
+                time.sleep(0.01)
                 continue
-
-            # Check if capture is available
-            cap_available = False
+                
             with self._lock:
-                cap_available = self.cap is not None and not self._closed
-                if cap_available:
-                    try:
-                        cap_available = self.cap.isOpened()
-                    except:
-                        cap_available = False
-                        
-            if cap_available:
-                try:
-                    ret, frame = None, None
-                    cap_valid = False
-                    with self._lock:
-                        cap_valid = self.cap is not None and not self._closed
-                    
-                    if cap_valid:
-                        try:
-                            ret, frame = self.cap.read()
-                        except Exception as e:
-                            error(f"Error reading frame: {e}")
-                            ret = False
-                            
-                    if ret and frame is not None:
-                        with self._lock:
-                            self.current_frame += 1
-                            
-                        # Emit frame without holding the lock
-                        self.frame_ready.emit(frame)
-
-                        # Control playback speed
-                        sleep_time = 1.0 / self.video_fps if self.video_fps > 0 else 0.033
-                        time.sleep(sleep_time)
-
-                        # Check if playback is finished
-                        finished = False
-                        total_frames = 0
-                        with self._lock:
-                            total_frames = self.total_frames
-                            if self.current_frame >= total_frames:
-                                finished = True
-                                
-                        if finished and total_frames > 0:
-                            debug("Playback finished")
-                            with self._lock:
-                                self.playing = False
-                                self.stopped = True
-                                self.current_frame = 0
-                                if self.cap is not None and not self._closed:
-                                    try:
-                                        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                                    except Exception as e:
-                                        error(f"Error resetting video position: {e}")
-                            self.playback_finished.emit()
-                    else:
-                        # Playback finished or error occurred
-                        debug("Playback finished (no more frames or error)")
-                        with self._lock:
-                            self.playing = False
-                            self.stopped = True
-                            self.current_frame = 0
-                            
-                            if self.cap is not None and not self._closed:
-                                try:
-                                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                                except Exception as e:
-                                    error(f"Error resetting video position: {e}")
-                        self.playback_finished.emit()
-                except Exception as e:
-                    error(f"Error during video playback: {e}")
-                    with self._lock:
-                        self.playing = False
-                        self.stopped = True
+                # Calculate time-based frame advancement
+                current_time = time.time()
+                elapsed = current_time - self.last_frame_time
+                self.last_frame_time = current_time
+                
+                # Advance frame based on elapsed time
+                frames_to_advance = int(elapsed * self.video_fps)
+                self.current_frame = min(self.current_frame + frames_to_advance, self.total_frames - 1)
+                
+                # Check if we've reached the end
+                if self.current_frame >= self.total_frames - 1:
+                    self.playing = False
+                    self.stopped = True
                     self.playback_finished.emit()
-            else:
-                debug("Video capture not opened or failed")
-                time.sleep(0.1)
-
-        # Clean up resources when exiting
-        self._safe_release_capture()
+                    # Stop audio
+                    if self.vlc_player:
+                        try:
+                            self.vlc_player.stop()
+                        except:
+                            pass
+                    continue
+            
+            # Get frame from clip
+            try:
+                timestamp = self.current_frame / self.video_fps
+                frame = self.clip.get_frame(t=timestamp)
+                
+                # Convert BGR to RGB
+                frame = frame[:, :, ::-1]
+                
+                # Emit frame
+                self.frame_ready.emit(frame)
+            except Exception as e:
+                error(f"Error getting frame: {e}")
+                
+            # Maintain frame rate
+            time.sleep(1.0 / self.video_fps if self.video_fps > 0 else 0.033)
+            
         debug("Video player thread exited")
 
     def shutdown(self):
@@ -280,7 +245,14 @@ class VideoPlayerThread(QThread):
             self.playing = False
             self.paused = False
             self.stopped = True
-
-    def seek(self, frame_number):
-        """Seek to specific frame"""
-        debug(f"Requesting seek to frame: {frame_number}")
+            
+            # Stop VLC audio
+            if self.vlc_player:
+                try:
+                    self.vlc_player.stop()
+                except:
+                    pass
+            
+            # Close clip
+            if self.clip:
+                self.clip.close()
