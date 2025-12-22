@@ -565,7 +565,7 @@ class MainWindow(QMainWindow):
         
     def select_video(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Video File", "", "Video Files (*.mp4 *.avi *.mov *.mkv *.flv *.wmv)")
+            self, "Select Video File", "", "Video Files (*.mp4 *.avi *.mov *.mkv *.flv *.wmv *.MP4 *.AVI *.MOV *.MKV *.FLV *.WMV)")
         
         if file_path:
             self.current_video_file = file_path
@@ -753,7 +753,7 @@ class MainWindow(QMainWindow):
         self.play_next_video()
         
     def play_next_video(self):
-        """Find and play the next MP4 file"""
+        """Find and play the next video file"""
         if not self.current_video_file:
             return
             
@@ -766,14 +766,16 @@ class MainWindow(QMainWindow):
         if current_dir == ".":
             current_dir = os.getcwd()
             
-        # Find all MP4 files in the directory
+        # Find all supported video files in the directory
         try:
             video_files = []
+            # 支持更多视频格式
+            supported_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv')
             for file in os.listdir(current_dir):
-                if file.lower().endswith('.mp4'):
+                if file.lower().endswith(supported_extensions):
                     video_files.append(file)
                     
-            # If no MP4 files are found, return
+            # If no video files are found, return
             if not video_files:
                 return
                 
@@ -833,6 +835,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             error(f" Error finding next video: {e}")
             self.statusBar().showMessage("Error occurred while finding next video")
+      
         
     def update_status(self):
         """Update status information"""
