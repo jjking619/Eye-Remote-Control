@@ -192,6 +192,8 @@ class FullScreenPlayer(QWidget):
         """Window show event"""
         super().showEvent(event)
         self.showFullScreen()
+        # Ensure controls are properly sized in fullscreen mode
+        self.adjust_overlay_positions()
         
     def keyPressEvent(self, event: QKeyEvent):
         """Keyboard event handling"""

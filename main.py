@@ -170,7 +170,21 @@ class MainWindow(QMainWindow):
         
     def init_ui(self):
         self.setWindowTitle('👁️ Eye Remote Control')
-        self.setGeometry(100, 100, 1400, 900)
+        # use adaptive sizing based on screen dimensions
+        screen = QApplication.primaryScreen()
+        screen_geometry = screen.availableGeometry()
+        screen_width = screen_geometry.width()
+        screen_height = screen_geometry.height()
+        
+        # Set window to 80% of screen size
+        window_width = int(screen_width * 0.8)
+        window_height = int(screen_height * 0.8)
+        self.setGeometry(
+            (screen_width - window_width) // 2,
+            (screen_height - window_height) // 2,
+            window_width,
+            window_height
+        )
         
         # Create central widget
         central_widget = QWidget()
@@ -193,7 +207,7 @@ class MainWindow(QMainWindow):
         
         # Fullscreen button
         self.fullscreen_btn = QPushButton("Fullscreen")
-        self.fullscreen_btn.setFixedSize(160, 30)
+        self.fullscreen_btn.setFixedSize(int(window_width * 0.12), 30)
         self.fullscreen_btn.clicked.connect(self.toggle_fullscreen)
         self.fullscreen_btn.setStyleSheet("""
             QPushButton {
@@ -207,7 +221,7 @@ class MainWindow(QMainWindow):
         """)
          #  Fullscreen play button
         self.fullscreen_play_btn = QPushButton("🎬 Fullscreen Play Mode")
-        self.fullscreen_play_btn.setFixedSize(200, 30)
+        self.fullscreen_play_btn.setFixedSize(int(window_width * 0.15), 30)
         self.fullscreen_play_btn.clicked.connect(self.enter_fullscreen_play_mode)
         self.fullscreen_play_btn.setStyleSheet("""
             QPushButton {
@@ -239,7 +253,8 @@ class MainWindow(QMainWindow):
         
         self.camera_display = QLabel("Starting camera...")
         self.camera_display.setAlignment(Qt.AlignCenter)
-        self.camera_display.setMinimumSize(640, 360)
+        # Use relative dimensions instead of fixed sizes
+        self.camera_display.setMinimumSize(int(window_width * 0.4), int(window_height * 0.3))
         self.camera_display.setStyleSheet("""
             QLabel {
                 background-color: #000000;
@@ -260,7 +275,8 @@ class MainWindow(QMainWindow):
         
         self.video_display = QLabel("Please select a video file")
         self.video_display.setAlignment(Qt.AlignCenter)
-        self.video_display.setMinimumSize(640, 360)
+        # Use relative dimensions instead of fixed sizes
+        self.video_display.setMinimumSize(int(window_width * 0.4), int(window_height * 0.3))
         self.video_display.setStyleSheet("""
             QLabel {
                 background-color: #000000;
@@ -292,15 +308,15 @@ class MainWindow(QMainWindow):
         
         self.video_play_btn = QPushButton("Play")
         self.video_play_btn.clicked.connect(self.play_video)
-        self.video_play_btn.setFixedSize(80, 30)
+        self.video_play_btn.setFixedSize(int(window_width * 0.06), 30)
         
         self.video_pause_btn = QPushButton("Pause")
         self.video_pause_btn.clicked.connect(self.pause_video)
-        self.video_pause_btn.setFixedSize(80, 30)
+        self.video_pause_btn.setFixedSize(int(window_width * 0.06), 30)
         
         self.video_stop_btn = QPushButton("Stop")
         self.video_stop_btn.clicked.connect(self.stop_video)
-        self.video_stop_btn.setFixedSize(80, 30)
+        self.video_stop_btn.setFixedSize(int(window_width * 0.06), 30)
         
         control_layout.addWidget(self.time_label)
         control_layout.addStretch()
@@ -334,7 +350,7 @@ class MainWindow(QMainWindow):
         self.cam_status = QLabel("Running")
         self.cam_status.setObjectName("status_value")
         self.cam_status.setStyleSheet("background-color: #a6e3a1; color: #000000;")
-        self.cam_status.setFixedSize(120, 25)  # Fixed size to prevent layout changes
+        self.cam_status.setFixedSize(int(window_width * 0.1), 25)  # Use relative width
         
         # FPS display
         fps_label = QLabel("⚡ Camera FPS:")
@@ -938,6 +954,30 @@ class MainWindow(QMainWindow):
         
         # Resource cleanup completed
         event.accept()
+
+    def resizeEvent(self, event):
+        """Handle window resize events"""
+        super().resizeEvent(event)
+        # 在窗口大小改变时重新调整显示区域
+        if hasattr(self, 'camera_display') and hasattr(self, 'video_display'):
+            # 根据新的窗口大小调整显示区域
+            new_width = event.size().width()
+            new_height = event.size().height()
+            
+            # 更新显示区域的最小尺寸
+            self.camera_display.setMinimumSize(int(new_width * 0.4), int(new_height * 0.3))
+            self.video_display.setMinimumSize(int(new_width * 0.4), int(new_height * 0.3))
+            
+            # 更新按钮尺寸
+            self.fullscreen_btn.setFixedSize(int(new_width * 0.12), 30)
+            self.fullscreen_play_btn.setFixedSize(int(new_width * 0.15), 30)
+            self.video_play_btn.setFixedSize(int(new_width * 0.06), 30)
+            self.video_pause_btn.setFixedSize(int(new_width * 0.06), 30)
+            self.video_stop_btn.setFixedSize(int(new_width * 0.06), 30)
+            
+            # 更新状态标签尺寸
+            if hasattr(self, 'cam_status'):
+                self.cam_status.setFixedSize(int(new_width * 0.1), 25)
 
 def main():
     app = QApplication(sys.argv)
