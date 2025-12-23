@@ -33,6 +33,7 @@ class VideoPlayerThread(QThread):
         # Audio player process
         self.audio_process = None
         self.audio_process_start_time = 0  # Track when audio process started
+        self._pause_position = 0  # Track the position when paused
 
     def load_video(self, file_path):
         """Load video file using MoviePy for video frames and prepare audio"""
@@ -65,6 +66,7 @@ class VideoPlayerThread(QThread):
                 self.playing = False
                 self.paused = False
                 self.current_frame = 0
+                self._pause_position = 0
 
             # Prepare video information
             video_info = {
@@ -188,7 +190,6 @@ class VideoPlayerThread(QThread):
                     'cvlc',
                     '--intf', 'dummy',  # No interface
                     '--no-video',       # Audio only
-                    '--play-and-exit',  # Exit when done
                     '--start-time', str(start_time),  # Start at specific time
                     '--rate', '1',      # Normal playback rate
                     '--quiet',          # Less verbose output
@@ -242,13 +243,15 @@ class VideoPlayerThread(QThread):
         """Pause the audio process if running - for this implementation we stop and restart at correct position"""
         if self.audio_process:
             try:
-                # For this implementation, we'll calculate the elapsed time and restart at the correct position
+                # Calculate the elapsed time and store it as the pause position
                 elapsed_time = time.time() - self.audio_process_start_time
+                self._pause_position = elapsed_time
+                # For this implementation, we'll stop the current process and restart at the correct position
                 self._stop_audio_process()
-                return elapsed_time
+                return self._pause_position
             except Exception as e:
                 error(f"Error pausing audio process: {e}")
-        return 0
+        return self._pause_position
 
     def _stop_audio_process(self):
         """Stop the audio process if running"""
@@ -263,11 +266,16 @@ class VideoPlayerThread(QThread):
                     # Force kill if it doesn't terminate gracefully
                     os.killpg(os.getpgid(self.audio_process.pid), signal.SIGKILL)
                 debug("Audio process stopped")
-            except ProcessLookupError:
-                # Process already terminated
-                pass
             except Exception as e:
                 error(f"Error stopping audio process: {e}")
+    def _resume_audio(self):
+         """Resume audio from the pause position"""
+         if self.clip and self.clip.audio:
+            try:
+                self._start_audio(self._pause_position)
+                debug(f"Resumed audio from position: {self._pause_position}")
+            except Exception as e:
+                error(f"Error resuming audio: {e}")
             finally:
                 self.audio_process = None
 
@@ -283,10 +291,10 @@ class VideoPlayerThread(QThread):
             # Calculate start time based on current frame position
             start_time = (self.current_frame / self.video_fps) if self.video_fps > 0 else 0
             
-            # For paused state, calculate the elapsed time to continue from that position
-            if not was_stopped and hasattr(self, '_pause_position'):
+            # For paused state, use the stored pause position
+            if not was_stopped and self.paused:
                 start_time = self._pause_position
-                delattr(self, '_pause_position')
+                self.paused = False
             
             # Start audio if available
             if self.clip and self.clip.audio:
@@ -295,8 +303,8 @@ class VideoPlayerThread(QThread):
                         # If we were stopped, start from the calculated position
                         self._start_audio(start_time)
                     else:
-                        # If we were paused, restart audio at the position where it was paused
-                        self._start_audio(start_time)
+                        # If we were paused, resume audio from the pause position
+                        self._resume_audio()
                     debug("Audio playback started")
                 except Exception as e:
                     error(f"Failed to start audio playback: {e}")
@@ -304,9 +312,8 @@ class VideoPlayerThread(QThread):
     def pause(self):
         """Pause playback"""
         with self._lock:
-            self.paused = True
-            # Calculate and store the current position when pausing
             if self.playing and not self.stopped:
+                # Calculate and store the current position when pausing
                 # Calculate the current position in the video
                 elapsed_time = time.time() - self.last_frame_time
                 frames_advanced = int(elapsed_time * self.video_fps)
@@ -315,6 +322,9 @@ class VideoPlayerThread(QThread):
                 
                 # Pause audio
                 self._pause_audio()
+                
+            self.paused = True
+            self.playing = False
             debug("Playback paused")
 
     def stop(self):
@@ -324,6 +334,7 @@ class VideoPlayerThread(QThread):
             self.paused = False
             self.stopped = True
             self.current_frame = 0
+            self._pause_position = 0
             
             # Stop audio
             self._stop_audio_process()
@@ -347,12 +358,15 @@ class VideoPlayerThread(QThread):
                     # Calculate the time position for seeking
                     seek_time = (frame_number / self.video_fps) if self.video_fps > 0 else 0
                     
+                    # Update the pause position to the new location
+                    self._pause_position = seek_time
+                    
                     # If currently playing, restart audio at new position
                     if self.playing and not self.paused:
                         self._start_audio(seek_time)
-                    else:
-                        # If paused, just update the internal position
-                        pass
+                    elif self.paused:
+                        # If paused, update the stored position to the new seek position
+                        self._pause_position = seek_time
                 except Exception as e:
                     error(f"Failed to seek audio: {e}")
 
@@ -417,6 +431,7 @@ class VideoPlayerThread(QThread):
             self.playing = False
             self.paused = False
             self.stopped = True
+            self._pause_position = 0
             
             # Stop audio process
             self._stop_audio_process()
