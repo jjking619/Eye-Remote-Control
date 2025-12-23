@@ -269,15 +269,13 @@ class VideoPlayerThread(QThread):
             except Exception as e:
                 error(f"Error stopping audio process: {e}")
     def _resume_audio(self):
-         """Resume audio from the pause position"""
-         if self.clip and self.clip.audio:
+        """Resume audio from the pause position"""
+        if self.clip and self.clip.audio:
             try:
                 self._start_audio(self._pause_position)
                 debug(f"Resumed audio from position: {self._pause_position}")
             except Exception as e:
                 error(f"Error resuming audio: {e}")
-            finally:
-                self.audio_process = None
 
     def play(self):
         """Start playback"""
