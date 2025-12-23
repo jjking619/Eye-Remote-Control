@@ -257,17 +257,26 @@ class VideoPlayerThread(QThread):
         """Stop the audio process if running"""
         if self.audio_process:
             try:
-                # Terminate the process group
-                os.killpg(os.getpgid(self.audio_process.pid), signal.SIGTERM)
-                # Wait a short time for graceful termination
-                try:
-                    self.audio_process.wait(timeout=1)
-                except subprocess.TimeoutExpired:
-                    # Force kill if it doesn't terminate gracefully
-                    os.killpg(os.getpgid(self.audio_process.pid), signal.SIGKILL)
-                debug("Audio process stopped")
+                # Check if process is still alive before attempting to stop it
+                if self.audio_process.poll() is None:  # Process is still running
+                    # Terminate the process group
+                    os.killpg(os.getpgid(self.audio_process.pid), signal.SIGTERM)
+                    # Wait a short time for graceful termination
+                    try:
+                        self.audio_process.wait(timeout=1)
+                    except subprocess.TimeoutExpired:
+                        # Force kill if it doesn't terminate gracefully
+                        os.killpg(os.getpgid(self.audio_process.pid), signal.SIGKILL)
+                    debug("Audio process stopped")
+                else:
+                    # Process has already terminated, just clean up
+                    debug("Audio process already terminated")
             except Exception as e:
                 error(f"Error stopping audio process: {e}")
+            finally:
+                # Always reset the audio process reference
+                self.audio_process = None
+
     def _resume_audio(self):
         """Resume audio from the pause position"""
         if self.clip and self.clip.audio:
