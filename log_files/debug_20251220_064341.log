@@ -1,0 +1,10 @@
+2025-12-20 06:43:42,131 - EyeRemoteControl - DEBUG - Searching for available camera devices...
+2025-12-20 06:43:42,906 - EyeRemoteControl - DEBUG - Found available camera at device ID: 2
+2025-12-20 06:43:42,907 - EyeRemoteControl - DEBUG - Starting camera capture on device ID: 2
+2025-12-20 06:43:43,696 - EyeRemoteControl - DEBUG - Command detected: pause
+2025-12-20 06:43:44,681 - EyeRemoteControl - DEBUG - Command detected: play
+2025-12-20 06:43:45,887 - EyeRemoteControl - DEBUG - Command detected: pause
+2025-12-20 06:43:46,555 - EyeRemoteControl - DEBUG - Stopping camera capture...
+2025-12-20 06:43:46,594 - EyeRemoteControl - DEBUG - Releasing camera capture
+2025-12-20 06:43:46,619 - EyeRemoteControl - DEBUG - Shutting down video player thread
+2025-12-20 06:43:46,624 - EyeRemoteControl - DEBUG - Video player thread exited
