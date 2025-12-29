@@ -4,4 +4,3 @@ mediapipe==0.10.9
 protobuf==3.20.3
 PySide6==6.5.3
 moviepy==1.0.3
-python-vlc==3.0.21203
