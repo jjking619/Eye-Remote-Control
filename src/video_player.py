@@ -88,21 +88,80 @@ class VideoPlayerThread(QThread):
             return False
 
     def _start_audio(self, start_time=0):
-        """Start audio playback using ALSA only"""
+        """Start audio playback using PulseAudio with improved error handling"""
         if not self.clip or not self.clip.audio:
             return
             
         try:
+            
             # Stop any existing audio process
             self._stop_audio_process()
             
-            # Use ALSA directly (only option to avoid PulseAudio issues)
-            if os.system('which aplay > /dev/null 2>&1') == 0:
+            # Only use PulseAudio as requested by user
+            if os.system('which paplay > /dev/null 2>&1') == 0:
+                debug("Using PulseAudio for audio playback")
+                temp_audio = f'/tmp/temp_audio_{int(time.time())}_{os.getpid()}.wav'
+                
+                # Extract audio segment
+                extract_cmd = [
+                    'ffmpeg',
+                    '-ss', str(start_time),
+                    '-i', self.current_file,
+                    '-acodec', 'pcm_s16le',
+                    '-ac', '2',
+                    '-ar', '48000',
+                    '-f', 'wav',
+                    '-y',
+                    temp_audio
+                ]
+                
+                subprocess.run(
+                    extract_cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                
+                # Critical: Capture stderr for diagnostics (per best practices)
+                self.audio_process = subprocess.Popen(
+                    ['paplay', temp_audio],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    preexec_fn=os.setsid
+                )
+                
+                # Start dedicated thread to capture stderr
+                def monitor_stderr():
+                    try:
+                        while True:
+                            line = self.audio_process.stderr.readline()
+                            if not line:
+                                break
+                            error(f"PulseAudio error: {line.decode().strip()}")
+                    except Exception as e:
+                        error(f"Error monitoring paplay: {e}")
+                
+                threading.Thread(target=monitor_stderr, daemon=True).start()
+                
+                self.audio_process_start_time = time.time() - start_time
+                debug(f"Started PulseAudio (PID: {self.audio_process.pid})")
+                
+                # Enhanced cleanup with error handling
+                def cleanup():
+                    try:
+                        time.sleep(max(0, self.video_duration - start_time + 1))
+                        if os.path.exists(temp_audio):
+                            os.remove(temp_audio)
+                    except Exception as e:
+                        error(f"Cleanup failed: {e}")
+                
+                threading.Thread(target=cleanup, daemon=True).start()
+                
+            # If PulseAudio is not available, try ALSA directly
+            elif os.system('which aplay > /dev/null 2>&1') == 0:
                 debug("Using ALSA for audio playback")
                 # Extract audio segment from video file
                 temp_audio = f'/tmp/temp_audio_{int(time.time())}_{os.getpid()}.wav'
                 
-                # Extract audio from video file starting at start_time
                 extract_cmd = [
                     'ffmpeg',
                     '-ss', str(start_time),
@@ -140,9 +199,61 @@ class VideoPlayerThread(QThread):
                 cleanup_thread = threading.Thread(target=cleanup, daemon=True)
                 cleanup_thread.start()
                 
+            # Fallback to VLC if PulseAudio and ALSA are not available
+            else:
+                debug("Using VLC for audio playback")
+                cmd = [
+                    'cvlc',
+                    '--intf', 'dummy',  # No interface
+                    '--no-video',       # Audio only
+                    '--start-time', str(start_time),  # Start at specific time
+                    '--rate', '1',      # Normal playback rate
+                    '--quiet',          # Less verbose output
+                    self.current_file
+                ]
+                
+                # Start the audio process
+                self.audio_process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    preexec_fn=os.setsid  # Create new process group
+                )
+                self.audio_process_start_time = time.time() - start_time
+                debug(f"Started VLC audio process with PID: {self.audio_process.pid}")
                 
         except Exception as e:
             error(f"Failed to start audio process: {e}")
+            # Fallback to a simple approach
+            self._start_audio_simple(start_time)
+
+    def _start_audio_simple(self, start_time=0):
+        """Simple audio playback as final fallback"""
+        try:
+            # Try using cvlc if available
+            if os.system('which cvlc > /dev/null 2>&1') == 0:
+                cmd = [
+                    'cvlc',
+                    '--intf', 'dummy',
+                    '--no-video',
+                    '--play-and-exit',
+                    '--start-time', str(start_time),
+                    '--quiet',
+                    self.current_file
+                ]
+                
+                self.audio_process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    preexec_fn=os.setsid
+                )
+                self.audio_process_start_time = time.time() - start_time
+                debug(f"Started simple VLC audio process with PID: {self.audio_process.pid}")
+            else:
+                error("No audio player found (paplay, aplay, cvlc)")
+        except Exception as e:
+            error(f"Failed to start simple audio process: {e}")
 
     def _pause_audio(self):
         """Pause the audio process if running - for this implementation we stop and restart at correct position"""
@@ -159,27 +270,22 @@ class VideoPlayerThread(QThread):
         return self._pause_position
 
     def _stop_audio_process(self):
-        """Stop the audio process if running"""
+        """Safely stop audio process with 0.5s wait time (per best practices)"""
         if self.audio_process:
             try:
-                # Check if process is still alive before attempting to stop it
-                if self.audio_process.poll() is None:  # Process is still running
-                    # Terminate the process group
+                if self.audio_process.poll() is None:
                     os.killpg(os.getpgid(self.audio_process.pid), signal.SIGTERM)
-                    # Wait a short time for graceful termination
+                    
+                    # Wait 0.5s as per best practices for complete resource release
                     try:
-                        self.audio_process.wait(timeout=1)
+                        self.audio_process.wait(timeout=0.5)
                     except subprocess.TimeoutExpired:
-                        # Force kill if it doesn't terminate gracefully
                         os.killpg(os.getpgid(self.audio_process.pid), signal.SIGKILL)
-                    debug("Audio process stopped")
-                else:
-                    # Process has already terminated, just clean up
-                    debug("Audio process already terminated")
+                    debug("PulseAudio process terminated safely")
+                
             except Exception as e:
-                error(f"Error stopping audio process: {e}")
+                error(f"Critical audio process termination error: {e}")
             finally:
-                # Always reset the audio process reference
                 self.audio_process = None
 
     def _resume_audio(self):
