@@ -130,6 +130,27 @@ class VideoPlayerThread(QThread):
             except:
                 return False
 
+    def _get_current_volume(self):
+        """Get current system volume percentage (0-100) from PulseAudio"""
+        try:
+            # Get the current volume of the default sink
+            result = subprocess.run(['pactl', 'get-sink-volume', '@DEFAULT_SINK@'], 
+                                    stdout=subprocess.PIPE, 
+                                    stderr=subprocess.DEVNULL, 
+                                    text=True, 
+                                    timeout=1)
+            if result.returncode == 0:
+                # Parse the volume percentage
+                # Example output: "Volume: front-left: 65536 / 100% / 0.00 dB,   front-right: 65536 / 100% / 0.00 dB"
+                # We'll take the first percentage value
+                import re
+                match = re.search(r'(\d+)%', result.stdout)
+                if match:
+                    return int(match.group(1))
+        except Exception as e:
+            error(f"Failed to get current volume: {e}")
+        return 100  # Default to 100% if we can't get the volume
+
     def _start_audio(self, start_time=0):
         """Start audio playback with device status checking and retry mechanism"""
         if not self.clip or not self.clip.audio:
@@ -185,9 +206,14 @@ class VideoPlayerThread(QThread):
                     stderr=subprocess.DEVNULL
                 )
                 
+                # Get current system volume and convert to paplay scale
+                volume_percent = self._get_current_volume()
+                volume_value = int(volume_percent * 655.36)
+                debug(f"Setting audio volume to {volume_percent}% ({volume_value})")
+                
                 # Critical: Capture stderr for diagnostics (per best practices)
                 self.audio_process = subprocess.Popen(
-                    ['paplay', temp_audio],
+                    ['paplay', '--volume', str(volume_value), temp_audio],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
                     preexec_fn=os.setsid
@@ -222,35 +248,35 @@ class VideoPlayerThread(QThread):
             
         except Exception as e:
             error(f"PulseAudio initialization failed: {e}")
-            self._start_audio_simple(start_time)
+            # self._start_audio_simple(start_time)
 
-    def _start_audio_simple(self, start_time=0):
-        """Simple audio playback as final fallback"""
-        try:
-            # Try using cvlc if available
-            if os.system('which cvlc > /dev/null 2>&1') == 0:
-                cmd = [
-                    'cvlc',
-                    '--intf', 'dummy',
-                    '--no-video',
-                    '--play-and-exit',
-                    '--start-time', str(start_time),
-                    '--quiet',
-                    self.current_file
-                ]
+    # def _start_audio_simple(self, start_time=0):
+    #     """Simple audio playback as final fallback"""
+    #     try:
+    #         # Try using cvlc if available
+    #         if os.system('which cvlc > /dev/null 2>&1') == 0:
+    #             cmd = [
+    #                 'cvlc',
+    #                 '--intf', 'dummy',
+    #                 '--no-video',
+    #                 '--play-and-exit',
+    #                 '--start-time', str(start_time),
+    #                 '--quiet',
+    #                 self.current_file
+    #             ]
                 
-                self.audio_process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    preexec_fn=os.setsid
-                )
-                self.audio_process_start_time = time.time() - start_time
-                debug(f"Started simple VLC audio process with PID: {self.audio_process.pid}")
-            else:
-                error("No audio player found (paplay, aplay, cvlc)")
-        except Exception as e:
-            error(f"Failed to start simple audio process: {e}")
+    #             self.audio_process = subprocess.Popen(
+    #                 cmd,
+    #                 stdout=subprocess.DEVNULL,
+    #                 stderr=subprocess.DEVNULL,
+    #                 preexec_fn=os.setsid
+    #             )
+    #             self.audio_process_start_time = time.time() - start_time
+    #             debug(f"Started simple VLC audio process with PID: {self.audio_process.pid}")
+    #         else:
+    #             error("No audio player found (paplay, aplay, cvlc)")
+    #     except Exception as e:
+    #         error(f"Failed to start simple audio process: {e}")
 
     def _pause_audio(self):
         """Pause the audio process if running - for this implementation we stop and restart at correct position"""
@@ -309,7 +335,6 @@ class VideoPlayerThread(QThread):
         """Pause playback"""
         with self._lock:
             if self.playing and not self.stopped:
-                # Calculate and store the current position when pausing
                 # Calculate the current position in the video
                 elapsed_time = time.time() - self.last_frame_time
                 frames_advanced = int(elapsed_time * self.video_fps)
