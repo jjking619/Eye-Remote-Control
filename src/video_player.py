@@ -35,9 +35,6 @@ class VideoPlayerThread(QThread):
         self.audio_process_start_time = 0
         self._pause_position = 0
         
-        # Add device status tracking variables
-        self._last_device_available = True
-        self._device_status_check_timer = None
 
     def load_video(self, file_path):
         """Load video file using MoviePy for video frames and prepare audio"""
@@ -248,35 +245,6 @@ class VideoPlayerThread(QThread):
             
         except Exception as e:
             error(f"PulseAudio initialization failed: {e}")
-            # self._start_audio_simple(start_time)
-
-    # def _start_audio_simple(self, start_time=0):
-    #     """Simple audio playback as final fallback"""
-    #     try:
-    #         # Try using cvlc if available
-    #         if os.system('which cvlc > /dev/null 2>&1') == 0:
-    #             cmd = [
-    #                 'cvlc',
-    #                 '--intf', 'dummy',
-    #                 '--no-video',
-    #                 '--play-and-exit',
-    #                 '--start-time', str(start_time),
-    #                 '--quiet',
-    #                 self.current_file
-    #             ]
-                
-    #             self.audio_process = subprocess.Popen(
-    #                 cmd,
-    #                 stdout=subprocess.DEVNULL,
-    #                 stderr=subprocess.DEVNULL,
-    #                 preexec_fn=os.setsid
-    #             )
-    #             self.audio_process_start_time = time.time() - start_time
-    #             debug(f"Started simple VLC audio process with PID: {self.audio_process.pid}")
-    #         else:
-    #             error("No audio player found (paplay, aplay, cvlc)")
-    #     except Exception as e:
-    #         error(f"Failed to start simple audio process: {e}")
 
     def _pause_audio(self):
         """Pause the audio process if running - for this implementation we stop and restart at correct position"""
