@@ -97,29 +97,59 @@ System supports smart playlist management:
 
 ### Installation Steps
 
-1. Clone the project:
+####  Python Environment Configuration
+Currently, the system's default Python version is 3.13, while the MediaPipe model we use requires a development environment compatible with Python 3.9-3.12. We need to specify the Python path again. Python 3.10 is already installed in the system, so we only need to modify the default Python path.
+
+Backup the current Python path link:
+```bash 
+sudo cp /usr/bin/python3 /usr/bin/python3.backup
+```
+
+Remove the current Python path link:
+```bash   
+sudo rm /usr/bin/python3
+```
+
+Create a new path link pointing to Python 3.10:
+```bash
+sudo ln -s /usr/bin/python3.10 /usr/bin/python3
+```
+
+Verify the modification. If the output shows Python 3.10.15, the configuration is successful:
+```bash
+ls -l /usr/bin/python3
+python3 --version
+```
+
+#### Clone the project:
 ```bash
 git clone <repository-url>
 cd eye-remote-control
 ```
 
-2. Create virtual environment (recommended):
+#### Create virtual environment (recommended):
 ```bash
 python3 -m venv mediapipe_env
 source mediapipe_env/bin/activate
 ```
 
-3. Upgrade pip:
+#### Upgrade pip:
 ```bash
 pip install --upgrade pip
 ```
 
-4. Install dependencies:
+#### Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-5. Run the program:
+#### Install ffmpeg
+```bash
+sudo apt update
+sudo apt install -y ffmpeg
+```
+
+#### Run the program:
 ```bash
 python3 main.py
 ```

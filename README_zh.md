@@ -96,30 +96,57 @@
 ## 🚀 安装与运行
 
 ### 安装步骤
+#### 配置python环境
+   目前系统默认的python版本为3.13，而我们使用的MediaPipe模型需要的开发环境在python3.9-3.12，需要重新指定python路径，系统中已经安装了python3.10，我们修改python默认路径即可。
 
-1. 克隆项目代码：
+备份当前Python路径链接
+```bash 
+sudo cp /usr/bin/python3 /usr/bin/python3.backup
+```
+删除当前Python路径链接
+```bash   
+sudo rm /usr/bin/python3
+```
+创建新的路径链接指向Python 3.10
+```bash
+sudo ln -s /usr/bin/python3.10 /usr/bin/python3
+```
+
+验证修改,输出为Python 3.10.15版本即配置成功
+```bash
+ls -l /usr/bin/python3
+python3 --version
+```
+
+#### 克隆项目代码：
 ```bash
 git clone <repository-url>
 cd eye-remote-control
 ```
 
-2. 创建虚拟环境（推荐）：
+#### 创建虚拟环境（推荐）：
 ```bash
 python3 -m venv mediapipe_env
 source /mediapipe_env/bin/activate  
 ```
 
-3. 更新pip源：
+#### 更新pip源：
 ```bash
 pip install --upgrade pip
 ```
 
-4. 安装依赖：
+#### 安装依赖：
 ```bash
 pip install -r requirements.txt
 ```
 
-5. 运行程序：
+#### 安装ffmpeg
+```bash
+sudo apt update
+sudo apt install -y ffmpeg
+```
+
+#### 运行程序：
 ```bash
 python3 main.py
 ```
