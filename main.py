@@ -196,14 +196,14 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(10, 10, 10, 10)
         
         # Title bar
-        title_frame = QFrame()
-        title_frame.setFixedHeight(50)
-        title_frame.setStyleSheet("background-color: #313244; border-radius: 8px;")
+        # title_frame = QFrame()
+        # title_frame.setFixedHeight(50)
+        # title_frame.setStyleSheet("background-color: #313244; border-radius: 8px;")
         
-        title_layout = QHBoxLayout(title_frame)
+        # title_layout = QHBoxLayout(title_frame)
         
-        title_label = QLabel("👁️ Eye Remote Control")
-        title_label.setStyleSheet("color: #89b4fa; font-size: 18px; font-weight: bold;")
+        # title_label = QLabel("👁️ Eye Remote Control")
+        # title_label.setStyleSheet("color: #89b4fa; font-size: 18px; font-weight: bold;")
         
         # Fullscreen button
         self.fullscreen_btn = QPushButton("Fullscreen")
@@ -233,11 +233,11 @@ class MainWindow(QMainWindow):
                 background-color: #74c7ec;
             }
         """)
-        title_layout.addWidget(title_label)
-        title_layout.addStretch()
-        title_layout.addWidget(self.fullscreen_play_btn)
-        title_layout.addWidget(self.fullscreen_btn)
-        main_layout.addWidget(title_frame)
+        # title_layout.addWidget(title_label)
+        # title_layout.addStretch()
+        # title_layout.addWidget(self.fullscreen_play_btn)
+        # title_layout.addWidget(self.fullscreen_btn)
+        # main_layout.addWidget(title_frame)
         
         # Main content area - horizontal split
         content_splitter = QSplitter(Qt.Horizontal)
@@ -338,6 +338,13 @@ class MainWindow(QMainWindow):
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         right_layout.setSpacing(15)
+
+        screen_show_group = QGroupBox()
+        screen_show_layout = QGridLayout()
+        screen_show_layout.addWidget(self.fullscreen_play_btn, 0, 0)
+        screen_show_layout.addWidget(self.fullscreen_btn, 0, 1)
+        screen_show_group.setLayout(screen_show_layout)
+        right_layout.addWidget(screen_show_group)
         
         # Real-time status display
         status_group = QGroupBox("📊 System Status")
@@ -398,26 +405,26 @@ class MainWindow(QMainWindow):
         self.video_status.setFixedSize(120, 25)  # Fixed size to prevent layout changes
         
         # Video file info
-        file_info_group = QGroupBox("📁 Video Info")
-        file_info_layout = QVBoxLayout()
+        # file_info_group = QGroupBox("📁 Video Info")
+        # file_info_layout = QVBoxLayout()
         
-        self.file_name_label = QLabel("Filename: Not Selected")
-        self.file_name_label.setStyleSheet("color: #cdd6f4; font-size: 15px;")
+        # self.file_name_label = QLabel("Filename: Not Selected")
+        # self.file_name_label.setStyleSheet("color: #cdd6f4; font-size: 15px;")
         
-        self.file_size_label = QLabel("Resolution: Not Loaded")
-        self.file_size_label.setStyleSheet("color: #cdd6f4; font-size: 15px;")
+        # self.file_size_label = QLabel("Resolution: Not Loaded")
+        # self.file_size_label.setStyleSheet("color: #cdd6f4; font-size: 15px;")
         
-        self.file_duration_label = QLabel("Duration: Not Loaded")
-        self.file_duration_label.setStyleSheet("color: #cdd6f4; font-size: 15px;")
+        # self.file_duration_label = QLabel("Duration: Not Loaded")
+        # self.file_duration_label.setStyleSheet("color: #cdd6f4; font-size: 15px;")
         
-        self.file_fps_label = QLabel("Frame Rate: Not Loaded")
-        self.file_fps_label.setStyleSheet("color: #cdd6f4; font-size: 15px;")
+        # self.file_fps_label = QLabel("Frame Rate: Not Loaded")
+        # self.file_fps_label.setStyleSheet("color: #cdd6f4; font-size: 15px;")
         
-        file_info_layout.addWidget(self.file_name_label)
-        file_info_layout.addWidget(self.file_size_label)
-        file_info_layout.addWidget(self.file_duration_label)
-        file_info_layout.addWidget(self.file_fps_label)
-        file_info_group.setLayout(file_info_layout)
+        # file_info_layout.addWidget(self.file_name_label)
+        # file_info_layout.addWidget(self.file_size_label)
+        # file_info_layout.addWidget(self.file_duration_label)
+        # file_info_layout.addWidget(self.file_fps_label)
+        # file_info_group.setLayout(file_info_layout)
         
         # Add to grid layout
         status_layout.addWidget(cam_status_label, 0, 0)
@@ -437,7 +444,7 @@ class MainWindow(QMainWindow):
         
         status_group.setLayout(status_layout)
         right_layout.addWidget(status_group)
-        right_layout.addWidget(file_info_group)
+        # right_layout.addWidget(file_info_group)
         
         # Control instructions
         instruction_group = QGroupBox("📋 Control Instructions")
@@ -621,10 +628,10 @@ class MainWindow(QMainWindow):
         duration = video_info['duration']
         
         # Update labels
-        self.file_name_label.setText(f"Filename: {filename}")
-        self.file_size_label.setText(f"Resolution: {width} × {height}")
-        self.file_duration_label.setText(f"Duration: {int(duration // 60):02d}:{int(duration % 60):02d}")
-        self.file_fps_label.setText(f"Frame Rate: {fps:.1f} FPS")
+        # self.file_name_label.setText(f"Filename: {filename}")
+        # self.file_size_label.setText(f"Resolution: {width} × {height}")
+        # self.file_duration_label.setText(f"Duration: {int(duration // 60):02d}:{int(duration % 60):02d}")
+        # self.file_fps_label.setText(f"Frame Rate: {fps:.1f} FPS")
         
         # Update time display
         self.video_duration = duration
