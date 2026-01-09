@@ -39,7 +39,7 @@ class VideoPlayerThread(QThread):
     def load_video(self, file_path):
         """Load video file using MoviePy for video frames and prepare audio"""
         try:
-            debug(f"Attempting to load video: {file_path}")
+            #debug(f"Attempting to load video: {file_path}")
             
             with self._lock:
                 # Release existing clip
@@ -82,13 +82,12 @@ class VideoPlayerThread(QThread):
 
             # Emit video information
             self.video_info_ready.emit(video_info)
-            debug(f"Successfully loaded video: {file_path}")
+            #debug(f"Successfully loaded video: {file_path}")
             return True
         except Exception as e:
             error(f"Failed to load video: {e}")
             return False
      
-    
     def _stop_audio_process(self):
         """Safely stop audio process with proper resource release and device status tracking"""
         if self.audio_process:
@@ -101,7 +100,7 @@ class VideoPlayerThread(QThread):
                         self.audio_process.wait(timeout=0.5)
                     except subprocess.TimeoutExpired:
                         os.killpg(os.getpgid(self.audio_process.pid), signal.SIGKILL)
-                    debug("PulseAudio process terminated safely")
+                    #debug("PulseAudio process terminated safely")
                 
             except Exception as e:
                 error(f"Critical audio process termination error: {e}")
@@ -160,7 +159,7 @@ class VideoPlayerThread(QThread):
             for attempt in range(3):
                 time.sleep(0.5 * (attempt + 1))  # Exponential backoff
                 if self._check_audio_device_status():
-                    debug(f"Audio device available on attempt {attempt + 1}")
+                    #debug(f"Audio device available on attempt {attempt + 1}")
                     break
             else:
                 error("Audio device not available after 3 attempts")
@@ -177,7 +176,7 @@ class VideoPlayerThread(QThread):
                 
             # Only use PulseAudio as requested by user
             if os.system('which paplay > /dev/null 2>&1') == 0:
-                debug("Using PulseAudio for audio playback")
+                #debug("Using PulseAudio for audio playback")
                 
                 # Wait for device to be ready (per specification: 1.5s for driver init)
                 time.sleep(0.5)  # Reduced from 1.5s to avoid excessive delay
@@ -206,7 +205,7 @@ class VideoPlayerThread(QThread):
                 # Get current system volume and convert to paplay scale
                 volume_percent = self._get_current_volume()
                 volume_value = int(volume_percent * 655.36)
-                debug(f"Setting audio volume to {volume_percent}% ({volume_value})")
+                #debug(f"Setting audio volume to {volume_percent}% ({volume_value})")
                 
                 # Critical: Capture stderr for diagnostics (per best practices)
                 self.audio_process = subprocess.Popen(
@@ -230,7 +229,7 @@ class VideoPlayerThread(QThread):
                 threading.Thread(target=monitor_stderr, daemon=True).start()
                 
                 self.audio_process_start_time = time.time() - start_time
-                debug(f"Started PulseAudio (PID: {self.audio_process.pid})")
+                #debug(f"Started PulseAudio (PID: {self.audio_process.pid})")
                 
                 # Enhanced cleanup with error handling
                 def cleanup():
@@ -265,7 +264,7 @@ class VideoPlayerThread(QThread):
         if self.clip and self.clip.audio:
             try:
                 self._start_audio(self._pause_position)
-                debug(f"Resumed audio from position: {self._pause_position}")
+                #debug(f"Resumed audio from position: {self._pause_position}")
             except Exception as e:
                 error(f"Error resuming audio: {e}")
 
@@ -295,7 +294,7 @@ class VideoPlayerThread(QThread):
                     else:
                         # If we were paused, resume audio from the pause position
                         self._resume_audio()
-                    debug("Audio playback started")
+                    #debug("Audio playback started")
                 except Exception as e:
                     error(f"Failed to start audio playback: {e}")
 
@@ -314,7 +313,7 @@ class VideoPlayerThread(QThread):
                 
             self.paused = True
             self.playing = False
-            debug("Playback paused")
+            #debug("Playback paused")
 
     def stop(self):
         """Stop playback"""
@@ -327,7 +326,7 @@ class VideoPlayerThread(QThread):
             
             # Stop audio
             self._stop_audio_process()
-            debug("Playback stopped")
+            #debug("Playback stopped")
 
     def get_position(self):
         """Get current playback position (0.0 to 1.0)"""
@@ -410,11 +409,11 @@ class VideoPlayerThread(QThread):
             # Maintain frame rate
             time.sleep(1.0 / self.video_fps if self.video_fps > 0 else 0.033)
             
-        debug("Video player thread exited")
+        #debug("Video player thread exited")
 
     def shutdown(self):
         """Safely shut down thread"""
-        debug("Shutting down video player thread")
+        #debug("Shutting down video player thread")
         with self._lock:
             self.exiting = True
             self.playing = False
