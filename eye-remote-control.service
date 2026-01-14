@@ -1,0 +1,17 @@
+[Unit]
+Description=Eye Remote Control Application
+After=graphical-session-pre.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/eye-remote-control
+Environment=DISPLAY=:0
+ExecStart=/bin/bash -c 'cd /home/pi/eye-remote-control && source ../mediapipe_env/bin/activate && python3 main.py'
+Restart=no
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical-session.target

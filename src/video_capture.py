@@ -37,7 +37,7 @@ class VideoCaptureThread(QThread):
 
     def find_available_camera(self):
         """Automatically detect available camera"""
-        debug("Searching for available camera devices...")
+        #debug("Searching for available camera devices...")
         # First try the default cameras (0-9)
         for i in range(10):
             temp_cap = None
@@ -47,7 +47,7 @@ class VideoCaptureThread(QThread):
                     ret, frame = temp_cap.read()
                     if ret:
                         temp_cap.release()
-                        debug(f"Found available camera at device ID: {i}")
+                        #debug(f"Found available camera at device ID: {i}")
                         return i
             except Exception as e:
                 error(f"Error checking camera {i}: {e}")
@@ -66,7 +66,7 @@ class VideoCaptureThread(QThread):
             if camera_id is None:
                 raise Exception("No available camera device found")
 
-        debug(f"Starting camera capture on device ID: {camera_id}")
+        #debug(f"Starting camera capture on device ID: {camera_id}")
         
         # Release existing capture if any
         self._safe_release_capture()
@@ -87,7 +87,7 @@ class VideoCaptureThread(QThread):
         self.start()
 
     def stop_capture(self):
-        debug("Stopping camera capture...")
+        #debug("Stopping camera capture...")
         with self._lock:
             self.running = False
             self.exiting = True
@@ -106,7 +106,7 @@ class VideoCaptureThread(QThread):
                 if self.cap is not None:
                     try:
                         if not self._closed:
-                            debug("Releasing camera capture")
+                            #debug("Releasing camera capture")
                             self.cap.release()
                     except Exception as e:
                         error(f"Error releasing camera capture: {e}")
@@ -223,7 +223,7 @@ class VideoCaptureThread(QThread):
 
                             # Emit command signal
                             if command and command != self.last_command:
-                                debug(f"Command detected: {command}")
+                                #debug(f"Command detected: {command}")
                                 self.command_detected.emit(command)
                                 with self._lock:
                                     self.last_command = command
