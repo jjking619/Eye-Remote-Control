@@ -38,7 +38,6 @@ class VideoPlayerThread(QThread):
         
         # Frame decoding
         self.codec_context = None
-        self._decoding_lock = threading.Lock()
         
         # Audio player process
         self.audio_process = None
@@ -169,7 +168,7 @@ class VideoPlayerThread(QThread):
                 if self.audio_process.poll() is None:
                     os.killpg(os.getpgid(self.audio_process.pid), signal.SIGTERM)
                     try:
-                        self.audio_process.wait(timeout=0.5)
+                        self.audio_process.wait(timeout=2)  # Increase timeout period
                     except subprocess.TimeoutExpired:
                         os.killpg(os.getpgid(self.audio_process.pid), signal.SIGKILL)
                     #debug("Audio process terminated")
@@ -531,5 +530,9 @@ class VideoPlayerThread(QThread):
             self.paused = False
             self.stopped = True
             
+            # Ensure thread is stopped before cleaning up
             self._stop_audio_process()
             self._cleanup_resources()
+            
+            # Wait briefly to allow operations to finish
+            time.sleep(0.1)

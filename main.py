@@ -596,8 +596,36 @@ class MainWindow(QMainWindow):
             # Stop any currently playing video
             if self.video_loaded:
                 self.video_player_thread.stop()
+                
+                # Wait briefly to allow resources to be freed
+                time.sleep(0.1)
+            
+            # Disconnect old thread signals to prevent receiving from old thread
+            try:
+                self.video_player_thread.frame_ready.disconnect(self.update_video_frame)
+                self.video_player_thread.playback_finished.disconnect(self.on_playback_finished)
+                self.video_player_thread.video_info_ready.disconnect(self.update_video_info)
+            except TypeError:
+                # Signals may not be connected, which is fine
+                pass
+            
+            # Delete old thread and create a new one
+            old_thread = self.video_player_thread
+            self.video_player_thread = VideoPlayerThread()
+            
+            # Connect new thread signals
+            self.video_player_thread.frame_ready.connect(self.update_video_frame)
+            self.video_player_thread.playback_finished.connect(self.on_playback_finished)
+            self.video_player_thread.video_info_ready.connect(self.update_video_info)
+            
+            # Shutdown and clean up old thread
+            old_thread.shutdown()
+            if old_thread.isRunning():
+                old_thread.quit()
+                old_thread.wait(3000)  # Wait up to 3 seconds for thread to finish
             
             if self.video_player_thread.load_video(file_path):
+                self.video_player_thread.start()  # Start the new thread
                 self.video_loaded = True
                 self.video_status.setText("Loaded")
                 self.video_status.setStyleSheet("background-color: #a6e3a1; color: #000000;")
@@ -629,9 +657,9 @@ class MainWindow(QMainWindow):
         
         # Update labels
         # self.file_name_label.setText(f"Filename: {filename}")
-        # self.file_size_label.setText(f"Resolution: {width} × {height}")
-        # self.file_duration_label.setText(f"Duration: {int(duration // 60):02d}:{int(duration % 60):02d}")
-        # self.file_fps_label.setText(f"Frame Rate: {fps:.1f} FPS")
+        # self.file_size_label.setText(f"Resolution: {video_info['width']} × {video_info['height']}")
+        # self.file_duration_label.setText(f"Duration: {int(video_info['duration'] // 60):02d}:{int(video_info['duration'] % 60):02d}")
+        # self.file_fps_label.setText(f"Frame Rate: {video_info['fps']:.1f} FPS")
         
         # Update time display
         self.video_duration = duration
@@ -655,24 +683,36 @@ class MainWindow(QMainWindow):
                     self.fullscreen_player.play_pause_btn.setText("Play")
                 
     def play_video(self):
-        if self.video_loaded:
-            self.video_player_thread.play()
-            self.video_status.setText("Playing")
-            self.video_status.setStyleSheet("background-color: #89b4fa; color: #000000;")
+        if self.video_loaded and self.video_player_thread:
+            try:
+                self.video_player_thread.play()
+                self.video_status.setText("Playing")
+                self.video_status.setStyleSheet("background-color: #89b4fa; color: #000000;")
+            except RuntimeError as e:
+                error(f"Error playing video: {e}")
+                QMessageBox.warning(self, "Playback Error", "Failed to start playback")
                 
     def pause_video(self):
-        if self.video_loaded:
-            self.video_player_thread.pause()
-            self.video_status.setText("Paused")
-            self.video_status.setStyleSheet("background-color: #f9e2af; color: #000000;")
+        if self.video_loaded and self.video_player_thread:
+            try:
+                self.video_player_thread.pause()
+                self.video_status.setText("Paused")
+                self.video_status.setStyleSheet("background-color: #f9e2af; color: #000000;")
+            except RuntimeError as e:
+                error(f"Error pausing video: {e}")
+                QMessageBox.warning(self, "Playback Error", "Failed to pause playback")
             
     def stop_video(self):
-        if self.video_loaded:
-            self.video_player_thread.stop()
-            self.video_status.setText("Stopped")
-            self.video_status.setStyleSheet("background-color: #f38ba8; color: #000000;")
-            self.progress_slider.setValue(0)
-            self.update_time_label(0, self.video_duration)
+        if self.video_loaded and self.video_player_thread:
+            try:
+                self.video_player_thread.stop()
+                self.video_status.setText("Stopped")
+                self.video_status.setStyleSheet("background-color: #f38ba8; color: #000000;")
+                self.progress_slider.setValue(0)
+                self.update_time_label(0, self.video_duration)
+            except RuntimeError as e:
+                error(f"Error stopping video: {e}")
+                QMessageBox.warning(self, "Playback Error", "Failed to stop playback")
             
     def update_camera_frame(self, frame):
         self.display_frame(self.camera_display, frame)
@@ -734,7 +774,7 @@ class MainWindow(QMainWindow):
         
     def update_progress(self):
         """Update progress bar"""
-        if self.video_loaded and self.video_player_thread.playing and not self.video_player_thread.paused:
+        if self.video_loaded and hasattr(self, 'video_player_thread') and self.video_player_thread.playing and not self.video_player_thread.paused:
             position = self.video_player_thread.get_position()
             self.progress_slider.setValue(int(position * 1000))
             
@@ -792,7 +832,7 @@ class MainWindow(QMainWindow):
         # Find all supported video files in the directory
         try:
             video_files = []
-            # 支持更多视频格式
+            # Support more video formats
             supported_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv')
             for file in os.listdir(current_dir):
                 if file.lower().endswith(supported_extensions):
@@ -831,9 +871,34 @@ class MainWindow(QMainWindow):
                 
                 # Wait a short time to ensure resources are released
                 time.sleep(0.1)
+                
+                # Disconnect old thread signals to prevent receiving from old thread
+                try:
+                    self.video_player_thread.frame_ready.disconnect(self.update_video_frame)
+                    self.video_player_thread.playback_finished.disconnect(self.on_playback_finished)
+                    self.video_player_thread.video_info_ready.disconnect(self.update_video_info)
+                except TypeError:
+                    # Signals may not be connected, which is fine
+                    pass
+                
+                # Delete old thread and create a new one
+                old_thread = self.video_player_thread
+                self.video_player_thread = VideoPlayerThread()
+                
+                # Connect new thread signals
+                self.video_player_thread.frame_ready.connect(self.update_video_frame)
+                self.video_player_thread.playback_finished.connect(self.on_playback_finished)
+                self.video_player_thread.video_info_ready.connect(self.update_video_info)
+                
+                # Shutdown and clean up old thread
+                old_thread.shutdown()
+                if old_thread.isRunning():
+                    old_thread.quit()
+                    old_thread.wait(3000)  # Wait up to 3 seconds for thread to finish
             
             # Load and play the next video
             if self.video_player_thread.load_video(next_video_path):
+                self.video_player_thread.start()  # Start the new thread
                 self.current_video_file = next_video_path
                 self.video_loaded = True
                 self.video_status.setText("Auto Playing")
@@ -883,11 +948,19 @@ class MainWindow(QMainWindow):
             
         if self.fullscreen_player is None:
             self.fullscreen_player = FullScreenPlayer(self)
+        else:
+            # Disconnect old connections if they exist
+            try:
+                self.video_player_thread.frame_ready.disconnect(self.fullscreen_player.update_video_frame)
+                self.video_thread.detection_status.disconnect(self.fullscreen_player.update_detection_status)
+            except TypeError:
+                # Signals may not be connected, which is fine
+                pass
             
-            # Connect signals
-            self.video_player_thread.frame_ready.connect(self.fullscreen_player.update_video_frame)
-            self.video_thread.detection_status.connect(self.fullscreen_player.update_detection_status)
-            
+        # Connect signals
+        self.video_player_thread.frame_ready.connect(self.fullscreen_player.update_video_frame)
+        self.video_thread.detection_status.connect(self.fullscreen_player.update_detection_status)
+        
         # Set fullscreen play button text based on current playback status
         if self.video_player_thread.playing and not self.video_player_thread.paused:
             self.fullscreen_player.play_pause_btn.setText("Pause")
@@ -934,6 +1007,7 @@ class MainWindow(QMainWindow):
         try:
             if hasattr(self, 'video_player_thread'):
                 # Stopping video player thread
+                self.video_player_thread.stop()
                 self.video_player_thread.shutdown()  # Use new shutdown method
                 
                 # Wait for thread to finish
@@ -965,24 +1039,24 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         """Handle window resize events"""
         super().resizeEvent(event)
-        # 在窗口大小改变时重新调整显示区域
+        # Adjust display areas when window size changes
         if hasattr(self, 'camera_display') and hasattr(self, 'video_display'):
-            # 根据新的窗口大小调整显示区域
+            # Adjust display areas according to new window size
             new_width = event.size().width()
             new_height = event.size().height()
             
-            # 更新显示区域的最小尺寸
+            # Update minimum size of display areas
             self.camera_display.setMinimumSize(int(new_width * 0.4), int(new_height * 0.3))
             self.video_display.setMinimumSize(int(new_width * 0.4), int(new_height * 0.3))
             
-            # 更新按钮尺寸
+            # Update button sizes
             self.fullscreen_btn.setFixedSize(int(new_width * 0.12), 30)
             self.fullscreen_play_btn.setFixedSize(int(new_width * 0.15), 30)
             self.video_play_btn.setFixedSize(int(new_width * 0.06), 30)
             self.video_pause_btn.setFixedSize(int(new_width * 0.06), 30)
             self.video_stop_btn.setFixedSize(int(new_width * 0.06), 30)
             
-            # 更新状态标签尺寸
+            # Update status label size
             if hasattr(self, 'cam_status'):
                 self.cam_status.setFixedSize(int(new_width * 0.1), 25)
 
