@@ -1,5 +1,7 @@
 # 👁️ Eye Remote Control
 
+[中文](README.md) | English
+
 This project is developed based on Quectel Pi H1 single-board computer, fully utilizing its powerful computing and multimedia processing capabilities to achieve low-latency, high-accuracy eye tracking functionality.
 
 Eye Remote Control is an intelligent control system that detects user's eye state to control video playback: continue playing when eyes are open and gazing at the screen, automatically pause when eyes are closed or looking away.
